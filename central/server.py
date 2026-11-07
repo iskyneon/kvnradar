@@ -200,12 +200,12 @@ def scan_rip_rdo_once():
     No resource hostnames/IPs are sent to feed providers or agents.
     """
     try:
-        domains, networks = blocklists.load_index()
+        domains, networks = blocklists.load_index(connect)
         with LOCK, connect() as c:
-            feed_rows={r['kind']:r['status'] for r in c.execute('SELECT kind,status FROM blocklist_sources')}
+            feed_rows={r['kind']:r['count'] for r in c.execute("SELECT kind,COUNT(*) AS count FROM blocklist_sources WHERE enabled=1 AND records>0 GROUP BY kind")}
             resources=[dict(r) for r in c.execute('SELECT id,host,rip_exempt FROM resources WHERE enabled=1')]
-        domain_ready=feed_rows.get('domain')=='ok' and bool(domains)
-        cidr_ready=feed_rows.get('cidr')=='ok' and bool(networks[4] or networks[6])
+        domain_ready=feed_rows.get('domain',0)>0 and bool(domains)
+        cidr_ready=feed_rows.get('cidr',0)>0 and bool(networks[4] or networks[6])
         for resource in resources:
             host=(resource.get('host') or '').strip().lower().strip('.')
             ips=[]; rdo_matches=[]; rip_matches=[]; error=''
@@ -220,7 +220,7 @@ def scan_rip_rdo_once():
                     for i in range(len(labels)):
                         suffix='.'.join(labels[i:])
                         if suffix in domains:
-                            rdo_matches.append(suffix)
+                            rdo_matches.extend({'domain':suffix,'source':source} for source in sorted(domains[suffix]))
                 rdo_status=('BAN' if rdo_matches else 'OK') if domain_ready else 'UNKNOWN'
                 try:
                     infos=socket.getaddrinfo(host,None, family=socket.AF_UNSPEC, type=socket.SOCK_STREAM)
@@ -265,10 +265,13 @@ def scan_rip_rdo_once():
     except Exception as exc:
         print('central RIP/RDO scan error:',type(exc).__name__,str(exc)[:200],flush=True)
 
+RIP_WAKE = threading.Event()
+
 def central_rip_rdo_worker():
     while True:
         scan_rip_rdo_once()
-        time.sleep(CENTRAL_BLOCKLIST_INTERVAL)
+        RIP_WAKE.wait(CENTRAL_BLOCKLIST_INTERVAL)
+        RIP_WAKE.clear()
 
 def scan_forever():
     while True:
@@ -465,7 +468,7 @@ def readonly_environment():
         except (ValueError, TypeError):
             value = 'not set'
         result.append({'key':key,'value':value,'source':'environment' if raw else 'default'})
-    return {'version':'0.6.1','entries':result,
+    return {'version':'0.6.2','entries':result,
             'notifications':{'compass':bool(os.getenv('COMPASS_BASE_URL') and os.getenv('COMPASS_BOT_TOKEN') and os.getenv('COMPASS_GROUP_ID')),
                              'telegram':bool(os.getenv('TELEGRAM_TOKEN') and os.getenv('TELEGRAM_CHAT_ID'))}}
 
@@ -509,11 +512,28 @@ class Handler(BaseHTTPRequestHandler):
     def admin_post(self):
         if self.headers.get('X-KVNRadar-Admin') != '1': return self.reply(403,{'error':'admin header required'})
         try:
-            if self.path not in ('/ui/api/resources/save','/ui/api/resources/delete','/ui/api/agents/short-name'):
+            if self.path not in ('/ui/api/resources/save','/ui/api/resources/delete','/ui/api/agents/short-name','/ui/api/blocklists/source/save','/ui/api/blocklists/source/delete','/ui/api/blocklists/source/update'):
                 return self.reply(404,{'error':'not found'})
             length=int(self.headers.get('Content-Length','0'))
             if length <= 0 or length > 65536: return self.reply(413,{'error':'body too large'})
             obj=json.loads(self.rfile.read(length))
+            if self.path.startswith('/ui/api/blocklists/source/'):
+                action=self.path.rsplit('/',1)[-1]
+                name=obj.get('name')
+                if action=='save':
+                    result=blocklists.save_source(connect,name,obj.get('kind'),obj.get('url'),obj.get('enabled',True))
+                elif action=='delete':
+                    blocklists.validate_source(name,'domain','https://example.com/list')
+                    result=blocklists.delete_source(connect,name)
+                elif action=='update':
+                    blocklists.validate_source(name,'domain','https://example.com/list')
+                    with LOCK, connect() as c:
+                        active=c.execute('SELECT 1 FROM blocklist_sources WHERE name=? AND enabled=1',(name,)).fetchone()
+                    if not active: return self.reply(400,{'error':'Source is missing or disabled'})
+                    blocklists.queue_update(name)
+                    result={'ok':True,'queued':True}
+                RIP_WAKE.set()
+                return self.reply(200,result)
             if self.path == '/ui/api/agents/short-name':
                 with LOCK, connect() as c:
                     short = agent_aliases.set_alias(c, obj.get('agent'), obj.get('short_name'))
@@ -619,7 +639,7 @@ class Handler(BaseHTTPRequestHandler):
 if __name__=='__main__':
     initdb()
     threading.Thread(target=dispatch_forever,daemon=True).start()
-    threading.Thread(target=blocklists.worker,args=(connect,LOCK),daemon=True).start()
+    threading.Thread(target=blocklists.worker,args=(connect,LOCK,RIP_WAKE.set),daemon=True).start()
     threading.Thread(target=central_rip_rdo_worker,daemon=True).start()
     port=int(os.getenv('PORT','8080'))
     print(f'KVNRadar listening on 127.0.0.1:{port} (proxy required)',flush=True)

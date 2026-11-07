@@ -62,6 +62,7 @@
       </section>
 
       <section id="page-blocklists" class="page">
+        <div class="toolbar surface"><div><strong id="blocklists-heading">Blocklist sources</strong><div class="toolbar-meta" id="blocklists-description">Manage downloaded RIP/RDO feeds.</div></div><button type="button" class="pill-btn primary" id="add-blocklist-source">+ Add source</button></div>
         <div class="metrics-row" id="feed-stats"></div>
         <div id="feed-sources" class="simple-grid"></div>
         <section class="soft-card">
@@ -97,9 +98,23 @@
         </div>
       </section>
     </main>
-    <footer class="app-footer" aria-label="KVNRadar version">KVNRadar <span>v0.6.1</span></footer>
+    <footer class="app-footer" aria-label="KVNRadar version">KVNRadar <span>v0.6.2</span></footer>
   </div>
 
+  <dialog id="blocklist-dialog" class="modal">
+    <form id="blocklist-form" method="dialog">
+      <div class="modal-head"><h2 id="blocklist-form-title">Add blocklist source</h2><button type="button" class="ghost-btn" id="blocklist-close">×</button></div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <label><span id="bl-id-label">Source ID</span><input id="bl-name" required maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9_-]*" placeholder="my-domains"></label>
+          <label><span id="bl-type-label">Type</span><select id="bl-kind"><option value="domain">Domain</option><option value="cidr">IP/CIDR</option></select></label>
+        </div>
+        <label style="display:block;margin-top:16px"><span id="bl-url-label">HTTPS feed URL</span><input id="bl-url" type="url" required maxlength="2048" placeholder="https://example.com/list.txt" style="display:block;width:100%;margin-top:8px"></label>
+        <label class="switch-line"><span id="bl-enabled-label">Enabled</span><input type="checkbox" id="bl-enabled" checked></label>
+      </div>
+      <div class="modal-foot"><button type="button" class="pill-btn secondary" id="blocklist-cancel">Cancel</button><button type="submit" class="pill-btn primary" id="blocklist-submit">Save</button></div>
+    </form>
+  </dialog>
   <dialog id="host-dialog" class="modal">
     <form id="host-form" method="dialog">
       <div class="modal-head">

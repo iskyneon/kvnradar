@@ -166,12 +166,46 @@ function renderAgents(){
     return `<article class="agent-card"><div class="section-top"><div><h3>${safe(id)} <span class="agent-pill ok">${safe(short)}</span></h3><p>${safe(id)}</p></div><span class="status ${t}">${t==='ok'?'Online':'Offline'}</span></div><div class="agent-facts"><div><small>Последний sync</small><strong>${a?date(a.last_seen):'—'}</strong></div><div><small>Назначено проверок</small><strong>${jobs}</strong></div><div><small>Управляющий канал</small><strong>TLS 1.3</strong></div><div><small>Режим</small><strong>короткие сеансы</strong></div></div><div class="agent-short-editor"><label>${window.KVNI18N?.lang()==='ru'?'Короткое имя':'Short name'} <input type="text" maxlength="2" pattern="[A-Za-z0-9]{2}" data-agent-short="${safe(id)}" value="${safe(short)}" aria-label="Short name for ${safe(id)}"></label><button type="button" class="pill-btn light" data-action="save-agent-short" data-id="${safe(id)}">${window.KVNI18N?.lang()==='ru'?'Сохранить':'Save'}</button><button type="button" class="pill-btn light" data-action="reset-agent-short" data-id="${safe(id)}">${window.KVNI18N?.lang()==='ru'?'Авто':'Auto'}</button></div></article>`;
   }).join('');
 }
+function blText(en,ru){return window.KVNI18N?.lang()==='ru'?ru:en;}
 function renderBlocklists(){
-  const sources=data.blocklists?.sources||[]; const hits=[...(data.blocklists?.hits||[]),...(data.blocklists?.central_matches||[])]; // KVNRADAR_BLOCKLISTS_CENTRAL_MATCHES_V04151
-  $('feed-stats').innerHTML = metricCard('Sources', sources.length, 'Configured', 'ok', 'globe') + metricCard('Healthy', sources.filter(s=>s.status==='ok').length, 'Last updates OK', 'ok', 'shield') + metricCard('Matches', hits.length, 'Including central RIP/RDO BAN', hits.length?'fail':'ok', 'alert');
-  $('feed-sources').innerHTML = sources.map(s=>`<article class="feed-card"><div class="section-top"><div><h3>${safe(s.name)}</h3><p>${safe(s.url)}</p></div><span class="status ${s.status==='ok'?'ok':'fail'}">${safe(s.status)}</span></div><div class="feed-meta"><span>${number(s.records)} записей</span><span>${date(s.updated_at)}</span></div><div class="mini-bar"><i style="width:${s.status==='ok'?'100':'12'}%"></i></div>${s.error?`<div class="empty" style="color:#aa3a3a">${safe(s.error)}</div>`:''}</article>`).join('') || '<div class="soft-card empty">Нет источников</div>';
-  $('feed-hits').innerHTML = table(['Ресурс','Тип','Источник','Совпадение','Последняя проверка'], hits.map(h=>[h.resource_name||h.resource_id,h.type||'RKN',h.source,h.match,date(h.checked_at)]));
+  const sources=data.blocklists?.sources||[];
+  const hits=[...(data.blocklists?.hits||[]),...(data.blocklists?.central_matches||[])];
+  $('blocklists-heading').textContent=blText('Blocklist sources','Источники блокировок');
+  $('blocklists-description').textContent=blText('Manage downloaded RIP/RDO feeds. Changes are saved in SQLite.','Управление списками RIP/RDO. Настройки сохраняются в SQLite.');
+  $('add-blocklist-source').textContent=blText('+ Add source','+ Добавить источник');
+  $('feed-stats').innerHTML=metricCard(blText('Sources','Источники'),sources.length,blText('Configured','Настроено'),'ok','globe')+
+    metricCard(blText('Healthy','Работают'),sources.filter(s=>s.enabled&&s.status==='ok').length,blText('Active and downloaded','Активны и загружены'),'ok','shield')+
+    metricCard(blText('Matches','Совпадения'),hits.length,blText('Including RIP/RDO BAN','Включая RIP/RDO BAN'),hits.length?'fail':'ok','alert');
+  $('feed-sources').innerHTML=sources.map(s=>{
+    const status=!s.enabled?'disabled':s.status;
+    return `<article class="feed-card"><div class="section-top"><div><h3>${safe(s.name)}</h3><p>${safe(s.url)}</p></div><span class="status ${status==='ok'?'ok':status==='error'?'fail':'unknown'}">${safe(status)}</span></div>
+    <div class="feed-meta"><span>${safe(s.kind==='cidr'?'IP/CIDR':'Domain')} · ${number(s.records)} ${blText('records','записей')}</span><span>${date(s.updated_at)}</span></div>
+    ${s.error?`<div class="empty" style="color:#aa3a3a">${safe(s.error)}</div>`:''}
+    <div class="feed-controls"><button class="pill-btn light" data-action="bl-edit" data-id="${safe(s.name)}">${blText('Edit','Изменить')}</button><button class="pill-btn light" data-action="bl-toggle" data-id="${safe(s.name)}">${s.enabled?blText('Disable','Отключить'):blText('Enable','Включить')}</button><button class="pill-btn light" data-action="bl-update" data-id="${safe(s.name)}" ${s.enabled?'':'disabled'}>${blText('Update now','Обновить')}</button><button class="pill-btn light bl-delete" data-action="bl-delete" data-id="${safe(s.name)}">${blText('Delete','Удалить')}</button></div></article>`;
+  }).join('')||'<div class="soft-card empty">'+blText('No sources','Источников нет')+'</div>';
+  $('feed-hits').innerHTML=table([blText('Resource','Ресурс'),blText('Type','Тип'),blText('Source','Источник'),blText('Match','Совпадение'),blText('Last check','Последняя проверка')],hits.map(h=>[h.resource_name||h.resource_id,h.type||'RKN',h.source,h.match,date(h.checked_at)]));
 }
+function openBlocklistSource(name=''){
+  const s=(data.blocklists?.sources||[]).find(x=>x.name===name);
+  $('bl-name').value=s?.name||''; $('bl-name').readOnly=!!s;
+  $('bl-kind').value=s?.kind||'domain'; $('bl-url').value=s?.url||''; $('bl-enabled').checked=s?.enabled!==0;
+  $('blocklist-form-title').textContent=s?blText('Edit source','Изменить источник'):blText('Add source','Добавить источник');
+  $('bl-id-label').textContent=blText('Source ID','Идентификатор'); $('bl-type-label').textContent=blText('Type','Тип');
+  $('bl-url-label').textContent=blText('HTTPS feed URL','HTTPS-адрес списка'); $('bl-enabled-label').textContent=blText('Enabled','Включён');
+  $('blocklist-cancel').textContent=blText('Cancel','Отмена'); $('blocklist-submit').textContent=blText('Save','Сохранить');
+  $('blocklist-dialog').showModal();
+}
+async function manageBlocklist(action,name){
+  const s=(data.blocklists?.sources||[]).find(x=>x.name===name);
+  if(!s)return;
+  let endpoint=action==='bl-toggle'?'save':action==='bl-update'?'update':'delete';
+  if(endpoint==='delete'&&!confirm(blText('Delete source ','Удалить источник ')+name+'?'))return;
+  const body=endpoint==='save'?{name:s.name,kind:s.kind,url:s.url,enabled:!s.enabled}:{name};
+  try{await apiPost('/ui/api/blocklists/source/'+endpoint,body);await refresh();
+    toast(endpoint==='update'?blText('Download queued','Загрузка запланирована'):blText('Source updated','Источник обновлён'));
+  }catch(e){toast(e.message)}
+}
+
 function renderHistory(records){$('history-count').textContent=`${records.length} записей`; $('history-list').innerHTML=table(['Время','Агент','Проверка','Статус','Байты','мс'], records.map(r=>[date(r.ts),agentLabel(r.agent),r.target,r.status,number(r.bytes),number(r.duration_ms)]))}
 function render(){renderOverview(); renderHosts(); renderAgents(); renderBlocklists(); decorate();}
 function showPage(page){if(!['overview','hosts','agents','blocklists','history','settings'].includes(page)) page='overview'; current=page; document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active', p.id==='page-'+page)); document.querySelectorAll('.nav-link').forEach(b=>b.classList.toggle('active', b.dataset.page===page)); location.hash=page; if(page==='history' && hasLoaded) loadHistory(); if(page==='settings') window.KVNSettings?.load();}
@@ -269,5 +303,15 @@ async function saveHost(e){
 async function deleteHost(id){ if(!confirm('Удалить ресурс '+id+'?')) return; try{ await apiPost('/ui/api/resources/delete',{id}); toast('Ресурс удалён'); await refresh(); } catch(err){ toast('Ошибка удаления: '+err.message); }}
 async function showDetails(id){ currentDetail=id; const r=(data.resources||[]).find(x=>x.id===id); if(!r) return; $('detail-title').textContent=(r.name||r.host||r.id)+' · история'; $('detail-body').innerHTML='<div class="empty">Загружаем измерения…</div>'; $('detail-dialog').showModal(); try{ const d=await apiGet('/ui/api/results?resource='+encodeURIComponent(id)); const records=d.results||[]; const enabledChecks=Object.keys(r.checks||{}).filter(k=>r.checks[k].enabled); $('detail-body').innerHTML=`<div class="detail-grid"><div class="detail-stat"><span>Всего</span><strong>${records.length}</strong></div><div class="detail-stat"><span>Ошибки</span><strong>${records.filter(x=>tone(x.status)==='fail').length}</strong></div><div class="detail-stat"><span>Агенты</span><strong>${new Set(records.map(x=>x.agent)).size}</strong></div><div class="detail-stat"><span>Проверки</span><strong>${enabledChecks.length}</strong></div></div><div class="chart-panel"><h3>Latency trend</h3>${spark(records.slice(0,50).map(x=>Number(x.duration_ms||0)))}</div><div class="soft-card">${enabledChecks.map(kind=>{const items=records.filter(x=>x.target===id+'--'+kind);return `<div class="line-mini"><strong>${safe(labels[kind]?.[0]||kind)}</strong><div class="toolbar-meta">${items.slice(0,5).map(x=>`${safe(agentLabel(x.agent))}: ${safe(x.status)} (${number(x.duration_ms)} ms)`).join(' · ')||'Нет измерений'}</div></div>`}).join('')}</div><div class="soft-card" style="margin-top:16px">${table(['Время','Агент','Проверка','Статус','Байты','мс'], records.slice(0,100).map(x=>[date(x.ts),agentLabel(x.agent),x.target.split('--').pop(),x.status,number(x.bytes),number(x.duration_ms)]))}</div>`; } catch(err){ $('detail-body').innerHTML='<div class="empty">Ошибка: '+safe(err.message)+'</div>'; }}
 async function loadHistory(){ const filterValue=$('history-resource').value; historyFilter=filterValue; $('history-list').innerHTML='<div class="empty">Загрузка истории…</div>'; try{ const d=await apiGet('/ui/api/results'+(filterValue?'?resource='+encodeURIComponent(filterValue):'')); if(current==='history' && $('history-resource').value===filterValue) renderHistory(d.results||[]); } catch(err){ $('history-list').innerHTML='<div class="empty">Ошибка загрузки истории: '+safe(err.message)+'</div>'; toast('Ошибка истории: '+err.message); }}
-document.addEventListener('click', e=>{ const btn=e.target.closest('[data-action]'); if(!btn) return; const id=btn.dataset.id; if(btn.dataset.action==='toggle-host'){ if(expanded.has(id)) expanded.delete(id); else expanded.add(id); render(); return; } if(btn.dataset.action==='toggle-check'){ const key=id+'::'+btn.dataset.kind; if(expanded.has(key)) expanded.delete(key); else expanded.add(key); render(); return; } if(btn.dataset.action==='details') showDetails(id); if(btn.dataset.action==='edit') openForm(id); if(btn.dataset.action==='delete') deleteHost(id); if(btn.dataset.action==='save-agent-short') updateAgentShort(id); if(btn.dataset.action==='reset-agent-short') updateAgentShort(id,true); });
+document.addEventListener('click', e=>{ const btn=e.target.closest('[data-action]'); if(!btn) return; const id=btn.dataset.id; if(btn.dataset.action==='toggle-host'){ if(expanded.has(id)) expanded.delete(id); else expanded.add(id); render(); return; } if(btn.dataset.action==='toggle-check'){ const key=id+'::'+btn.dataset.kind; if(expanded.has(key)) expanded.delete(key); else expanded.add(key); render(); return; } if(btn.dataset.action==='details') showDetails(id); if(btn.dataset.action==='edit') openForm(id); if(btn.dataset.action==='delete') deleteHost(id); if(btn.dataset.action==='save-agent-short') updateAgentShort(id); if(btn.dataset.action==='reset-agent-short') updateAgentShort(id,true); if(btn.dataset.action==='bl-edit') openBlocklistSource(id); if(['bl-toggle','bl-update','bl-delete'].includes(btn.dataset.action)) manageBlocklist(btn.dataset.action,id); });
 document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>showPage(b.dataset.page)); $('reload').onclick=refresh; $('add-host').onclick=()=>openForm(''); $('close-form').onclick=()=>$('host-dialog').close(); $('cancel-form').onclick=()=>$('host-dialog').close(); $('host-form').onsubmit=saveHost; $('close-detail').onclick=()=>$('detail-dialog').close(); $('detail-edit').onclick=()=>{$('detail-dialog').close(); openForm(currentDetail)}; $('host-search').oninput=e=>{search=e.target.value.trim(); renderHosts()}; $('host-filter').onchange=e=>{filter=e.target.value; renderHosts()}; $('history-resource').onchange=loadHistory; $('history-refresh').onclick=loadHistory; showPage(location.hash.slice(1)||'overview'); decorate(); refresh(); setInterval(refresh,30000); document.addEventListener('kvnradar:language',()=>{if(hasLoaded){render();if(current==='history')loadHistory();}});
+
+$('add-blocklist-source').onclick=()=>openBlocklistSource();
+$('blocklist-close').onclick=()=>$('blocklist-dialog').close();
+$('blocklist-cancel').onclick=()=>$('blocklist-dialog').close();
+$('blocklist-form').onsubmit=async e=>{
+  e.preventDefault();
+  const body={name:$('bl-name').value.trim(),kind:$('bl-kind').value,url:$('bl-url').value.trim(),enabled:$('bl-enabled').checked};
+  try{await apiPost('/ui/api/blocklists/source/save',body);$('blocklist-dialog').close();await refresh();toast(blText('Source saved','Источник сохранён'));}
+  catch(err){toast(err.message)}
+};
