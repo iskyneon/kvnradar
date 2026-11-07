@@ -468,7 +468,7 @@ def readonly_environment():
         except (ValueError, TypeError):
             value = 'not set'
         result.append({'key':key,'value':value,'source':'environment' if raw else 'default'})
-    return {'version':'0.6.3','entries':result,
+    return {'version':'0.6.4','entries':result,
             'notifications':{'compass':bool(os.getenv('COMPASS_BASE_URL') and os.getenv('COMPASS_BOT_TOKEN') and os.getenv('COMPASS_GROUP_ID')),
                              'telegram':bool(os.getenv('TELEGRAM_TOKEN') and os.getenv('TELEGRAM_CHAT_ID'))}}
 

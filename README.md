@@ -7,7 +7,7 @@
 KVNRadar monitors reachability, DNS resolution, TCP connectivity, TLS, HTTP(S) availability, content-transfer anomalies and network routes from multiple independent Linux locations. 
 A central Python service coordinates lightweight Go agents, stores results in SQLite and provides a protected web dashboard. No VPN between agents and central is required.
 
-![version](https://img.shields.io/badge/version-0.6.3-blue)
+![version](https://img.shields.io/badge/version-0.6.4-blue)
 ![platform](https://img.shields.io/badge/platform-Linux-informational)
 ![architecture](https://img.shields.io/badge/agent-amd64%20%7C%20arm64-informational)
 ![docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)

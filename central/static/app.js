@@ -138,7 +138,7 @@ function hostCard(r){
       <div class="chart-wrap">${spark(contentSeries)}</div>
       ${timeline(records)}
       <div class="section-lines">${`<div class="agent-pills central-checks">${centralBadge("RIP",central.rip_status)}${centralBadge("RDO",central.rdo_status)}</div>`}${byCheck.map(([kind,items])=>checkLine(r.id,kind,items)).join('')||'<div class="empty">Нет включённых проверок</div>'}</div>
-      <div class="expanded-actions"><button class="pill-btn light" data-action="details" data-id="${safe(r.id)}">Подробнее</button><button type="button" class="pill-btn ${r.enabled===false?'host-resume':'host-pause'}" data-action="toggle-monitoring" data-id="${safe(r.id)}">${r.enabled===false?blText('Resume monitoring','Возобновить мониторинг'):blText('Pause monitoring','Приостановить мониторинг')}</button><button class="pill-btn light" data-action="edit" data-id="${safe(r.id)}">Изменить</button><button class="pill-btn light" data-action="delete" data-id="${safe(r.id)}">Удалить</button></div>
+      <div class="expanded-actions"><button type="button" class="pill-btn ${r.enabled===false?'host-resume':'host-pause'}" data-action="toggle-monitoring" data-id="${safe(r.id)}">${r.enabled===false?blText('Resume monitoring','Возобновить мониторинг'):blText('Pause monitoring','Приостановить мониторинг')}</button><button class="pill-btn light" data-action="edit" data-id="${safe(r.id)}">Изменить</button><button class="pill-btn light" data-action="delete" data-id="${safe(r.id)}">Удалить</button></div>
     </div>`:''}
   </article>`;
 }

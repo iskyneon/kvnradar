@@ -49,3 +49,10 @@
 @media(max-width:720px){#page-overview .private-overview-head h2{font-size:22px}#page-overview .service{padding:17px 14px}#page-overview .service h3{font-size:17px}#page-overview .check-group{flex-wrap:wrap;white-space:normal}#page-overview .timeline{gap:2px}#page-overview .tick{height:19px}}
 /* The old public publication flag is obsolete after disabling the public site. */
 .public-switch-line{display:none!important}
+
+/* KVNRadar: resource insights live in Overview, next to the service status. */
+#page-overview .service-controls{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:12px 16px}
+#page-overview .service-details-btn{border:1px solid #3b3b3b;background:#1f1f1f;color:#f0f0f0;padding:8px 14px;border-radius:11px;font:inherit;font-size:12px;font-weight:650;cursor:pointer;white-space:nowrap;transition:background .15s,border-color .15s}
+#page-overview .service-details-btn:hover{background:#2c2c2c;border-color:#686868}
+#page-overview .service-details-btn:focus-visible{outline:2px solid #59a9ff;outline-offset:3px}
+@media(max-width:720px){#page-overview .service-controls{gap:8px}#page-overview .service-details-btn{padding:7px 10px}}
