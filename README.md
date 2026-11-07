@@ -39,7 +39,6 @@ KVNRadar monitors reachability, DNS resolution, TCP connectivity, TLS, HTTP(S), 
 - [Building and testing](#building-and-testing)
 - [Repository layout](#repository-layout)
 - [Compatibility and limitations](#compatibility-and-limitations)
-- [License](#license)
 
 ## Features
 

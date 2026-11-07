@@ -12,7 +12,7 @@ import smtplib
 import ssl
 from urllib.parse import urlsplit
 
-_VERSION = '0.6.6'
+_VERSION = '0.6.8'
 _SUCCESS = ('OK_FULL', 'OK_TCP', 'OK_DNS', 'OK_ICMP', 'OK_TLS', 'OK_HTTP', 'OK_TRACE')
 
 
