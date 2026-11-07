@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>KVNRadar</title>
   <link rel="stylesheet" href="/ui/static/app.css">
+  <link rel="stylesheet" href="/ui/static/inspect.css">
   <link rel="stylesheet" href="/ui/static/private-overview.css">
 </head>
 <body>
@@ -22,6 +23,7 @@
         <button data-page="hosts" class="nav-link">Hosts</button>
         <button data-page="agents" class="nav-link">Agents</button>
         <button data-page="blocklists" class="nav-link">Blocklists</button>
+        <button data-page="inspect" class="nav-link">Inspect</button>
         <button data-page="history" class="nav-link">History</button>
         <button data-page="settings" class="nav-link">Settings</button>
       </nav>
@@ -69,6 +71,32 @@
         </section>
       </section>
 
+      <section id="page-inspect" class="page">
+        <div class="toolbar surface"><div><strong id="inspect-heading">Inspect</strong><div class="toolbar-meta" id="inspect-description">Check any host or IP against cached RIP/RDO blocklists and optionally request one-time probes from an agent.</div></div></div>
+        <section class="soft-card inspect-panel">
+          <form id="inspect-form" autocomplete="off">
+            <div class="inspect-inputs">
+              <label><span id="inspect-host-label">Hostname or IP address</span><input id="inspect-host" type="text" required maxlength="253" placeholder="example.org" spellcheck="false"></label>
+              <label><span id="inspect-port-label">Port</span><input id="inspect-port" type="number" min="1" max="65535" value="443" required></label>
+            </div>
+            <label class="switch-line inspect-option"><span id="inspect-agent-toggle-label">Run one-time probes from a selected agent</span><input id="inspect-use-agent" type="checkbox"></label>
+            <div id="inspect-agent-options" class="inspect-agent-options" hidden>
+              <label><span id="inspect-agent-label">Agent</span><select id="inspect-agent"><option value="">Select agent</option></select></label>
+              <fieldset class="inspect-checks"><legend id="inspect-checks-label">One-time checks</legend>
+                <label><input type="checkbox" name="inspect-check" value="tcp" checked> TCP</label>
+                <label><input type="checkbox" name="inspect-check" value="tls" checked> TLS</label>
+                <label><input type="checkbox" name="inspect-check" value="https" checked> HTTPS</label>
+                <label><input type="checkbox" name="inspect-check" value="dpi" checked> DPI / Content</label>
+              </fieldset>
+              <p class="inspect-notice" id="inspect-notice">The request will be queued for the selected agent. The agent picks it up on its next synchronization, executes the checks once, and returns the results on a subsequent synchronization. This can take several minutes.</p>
+            </div>
+            <div class="inspect-form-footer"><button type="submit" class="pill-btn primary" id="inspect-submit">Inspect host</button><span id="inspect-form-error" class="inspect-error" role="alert"></span></div>
+          </form>
+        </section>
+        <div id="inspect-current" aria-live="polite"></div>
+        <section class="soft-card inspect-history"><h2 id="inspect-recent-heading">Recent inspections</h2><div id="inspect-recent"></div></section>
+      </section>
+
       <section id="page-history" class="page">
         <div class="toolbar surface">
           <select id="history-resource"><option value="">All resources</option></select>
@@ -96,7 +124,7 @@
         </div>
       </section>
     </main>
-    <footer class="app-footer" aria-label="KVNRadar version">KVNRadar <span>v0.6.4</span></footer>
+    <footer class="app-footer" aria-label="KVNRadar version">KVNRadar <span>v0.6.5</span></footer>
   </div>
 
   <dialog id="blocklist-dialog" class="modal">
@@ -162,5 +190,6 @@
   <script defer src="/ui/static/app.js"></script>
   <script defer src="/ui/static/private-overview.js"></script>
   <script defer src="/ui/static/settings.js"></script>
+  <script defer src="/ui/static/inspect.js"></script>
 </body>
 </html>

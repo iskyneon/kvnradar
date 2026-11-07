@@ -14,6 +14,7 @@ from urllib.parse import urlparse, parse_qs
 import urllib.error
 import blocklists
 import agent_aliases
+import kvn_inspect as inspect_jobs
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -69,6 +70,7 @@ def initdb():
         if not any(col[1] == 'rip_exempt' for col in c.execute('PRAGMA table_info(resources)')):
             c.execute('ALTER TABLE resources ADD COLUMN rip_exempt INTEGER NOT NULL DEFAULT 0 CHECK(rip_exempt IN (0,1))')
         blocklists.schema(c)
+        inspect_jobs.schema(c)
         # KVNRADAR_CENTRAL_RIP_RDO_V0415: always-on central-only checks; no agent assignment.
         c.executescript("""
         CREATE TABLE IF NOT EXISTS central_resource_checks (
@@ -114,6 +116,8 @@ def enqueue(c, message):
 
 def process(c, agent, event):
     if not isinstance(event, dict): return False
+    inspected = inspect_jobs.consume_event(c, agent, event)
+    if inspected is not None: return inspected
     eid = str(event.get('id', ''))[:100]
     target = str(event.get('target', ''))[:200]
     status = str(event.get('status', ''))[:40]
@@ -504,6 +508,9 @@ class Handler(BaseHTTPRequestHandler):
                 for e in events:
                     if process(c,agent,e): accepted.append(str(e['id']))
             targets = [t for t in compiled_targets() if not t.get('agents') or agent in t['agents']]
+            # One-shot targets are fetched once and never enter normal monitoring.
+            with LOCK:
+                targets.extend(inspect_jobs.dispatch(connect, agent))
             return self.reply(200, {'accepted':accepted,'targets':targets,'config_version':2,'server_time':now()})
         except (ValueError,KeyError,TypeError,json.JSONDecodeError) as e:
             return self.reply(400,{'error':'invalid request'})
@@ -512,11 +519,14 @@ class Handler(BaseHTTPRequestHandler):
     def admin_post(self):
         if self.headers.get('X-KVNRadar-Admin') != '1': return self.reply(403,{'error':'admin header required'})
         try:
-            if self.path not in ('/ui/api/resources/save','/ui/api/resources/delete','/ui/api/resources/toggle','/ui/api/agents/short-name','/ui/api/blocklists/source/save','/ui/api/blocklists/source/delete','/ui/api/blocklists/source/update'):
+            if self.path not in ('/ui/api/resources/save','/ui/api/resources/delete','/ui/api/resources/toggle','/ui/api/agents/short-name','/ui/api/blocklists/source/save','/ui/api/blocklists/source/delete','/ui/api/blocklists/source/update','/ui/api/inspect'):
                 return self.reply(404,{'error':'not found'})
             length=int(self.headers.get('Content-Length','0'))
             if length <= 0 or length > 65536: return self.reply(413,{'error':'body too large'})
             obj=json.loads(self.rfile.read(length))
+            if self.path == '/ui/api/inspect':
+                result=inspect_jobs.create(connect,obj,readjson(AGENTS))
+                return self.reply(200,{'job':result})
             if self.path.startswith('/ui/api/blocklists/source/'):
                 action=self.path.rsplit('/',1)[-1]
                 name=obj.get('name')
@@ -570,7 +580,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(400,{'error':str(e)[:160]})
 
     def do_GET(self):
-        if self.path in ("/ui/static/app.css", "/ui/static/app.js", "/ui/static/private-overview.js", "/ui/static/private-overview.css", "/ui/static/i18n.js", "/ui/static/settings.js"):
+        if self.path in ("/ui/static/app.css", "/ui/static/app.js", "/ui/static/private-overview.js", "/ui/static/private-overview.css", "/ui/static/i18n.js", "/ui/static/settings.js", "/ui/static/inspect.js", "/ui/static/inspect.css"):
             name = self.path.rsplit("/", 1)[-1]
             path = Path("/app/static") / name
             try:
@@ -589,6 +599,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_error(404)
             return
 
+        if self.path.startswith('/ui/api/inspect'):
+            if self.path == '/ui/api/inspect':
+                return self.reply(200,{'jobs':inspect_jobs.recent_jobs(connect),'agents':sorted(readjson(AGENTS))})
+            q=parse_qs(urlparse(self.path).query)
+            if urlparse(self.path).path != '/ui/api/inspect': return self.reply(404,{'error':'not found'})
+            job=inspect_jobs.read_job(connect,q.get('id',[''])[0])
+            return self.reply(200,{'job':job}) if job else self.reply(404,{'error':'inspection not found'})
         if self.path=='/ui/api/settings': return self.reply(200,readonly_environment())
         if self.path=='/ui/api/private-status':
             import private_status

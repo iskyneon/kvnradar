@@ -225,7 +225,7 @@ async function manageBlocklist(action,name){
 
 function renderHistory(records){$('history-count').textContent=`${records.length} записей`; $('history-list').innerHTML=table(['Время','Агент','Проверка','Статус','Байты','мс'], records.map(r=>[date(r.ts),agentLabel(r.agent),r.target,r.status,number(r.bytes),number(r.duration_ms)]))}
 function render(){renderOverview(); renderHosts(); renderAgents(); renderBlocklists(); decorate();}
-function showPage(page){if(!['overview','hosts','agents','blocklists','history','settings'].includes(page)) page='overview'; current=page; document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active', p.id==='page-'+page)); document.querySelectorAll('.nav-link').forEach(b=>b.classList.toggle('active', b.dataset.page===page)); location.hash=page; if(page==='history' && hasLoaded) loadHistory(); if(page==='settings') window.KVNSettings?.load();}
+function showPage(page){if(!['overview','hosts','agents','blocklists','inspect','history','settings'].includes(page)) page='overview'; current=page; document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active', p.id==='page-'+page)); document.querySelectorAll('.nav-link').forEach(b=>b.classList.toggle('active', b.dataset.page===page)); location.hash=page; if(page==='history' && hasLoaded) loadHistory(); if(page==='settings') window.KVNSettings?.load(); if(page==='inspect') window.KVNInspect?.load();}
 async function updateAgentShort(id, reset=false){
   const input=[...document.querySelectorAll('[data-agent-short]')].find(x=>x.dataset.agentShort===id);
   const short_name=reset?'':String(input?.value||'').trim().toUpperCase();

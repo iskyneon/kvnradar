@@ -1,17 +1,18 @@
 # KVNRadar
 
-![KVNRadar — Product Tour](assets/KVNRadar-v0.6.4-tour.gif)
+![KVNRadar — Product Tour](assets/KVNRadar-v0.6.5-tour.gif)
 
 **Self-hosted distributed infrastructure monitoring and network-blocking diagnostics.**
 
-KVNRadar monitors reachability, DNS resolution, TCP connectivity, TLS, HTTP(S), content-transfer anomalies and network routes from multiple independent Linux locations. 
-A central Python service coordinates lightweight Go agents, stores results in SQLite and provides an authenticated web dashboard. Agents pull tasks from central; no VPN or inbound agent listener is required.
+KVNRadar monitors reachability, DNS resolution, TCP connectivity, TLS, HTTP(S), content-transfer anomalies and network routes from multiple independent Linux locations. A central Python service coordinates lightweight Go agents, stores results in SQLite and provides an authenticated web dashboard. Agents pull tasks from central; no VPN or inbound agent listener is required.
 
-![version](https://img.shields.io/badge/version-0.6.4-blue)
+![version](https://img.shields.io/badge/version-0.6.5-blue)
 ![platform](https://img.shields.io/badge/platform-Linux-informational)
 ![architecture](https://img.shields.io/badge/agent-amd64%20%7C%20arm64-informational)
 ![docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 ![self-hosted](https://img.shields.io/badge/deployment-self--hosted-success)
+
+> **Source release:** Runtime credentials, certificates, live SQLite databases, downloaded blocklists and backups are not included. Generate credentials locally before deploying.
 
 ---
 
@@ -24,6 +25,8 @@ A central Python service coordinates lightweight Go agents, stores results in SQ
 - [Agent installation](#agent-installation)
 - [Dashboard](#dashboard)
 - [Blocklist source management](#blocklist-source-management)
+- [Inspect: on-demand diagnostics](#inspect-on-demand-diagnostics)
+- [Screenshots](#screenshots)
 - [Checks and status model](#checks-and-status-model)
 - [Agent short names](#agent-short-names)
 - [Languages and settings](#languages-and-settings)
@@ -45,6 +48,7 @@ A central Python service coordinates lightweight Go agents, stores results in SQ
 | **Blocklists** | Independently maintained RIP (IP/CIDR) and RDO (domain) feeds; add, edit, disable, update and delete sources in the dashboard |
 | **RIP exclusions** | Per-resource `rip_exempt` produces blue `EXC` while retaining independent RDO checks |
 | **Agents** | Two-character display labels generated automatically or overridden in **Agents** without changing agent IDs/tokens |
+| **Inspect** | On-demand central RIP/RDO lookup for any hostname/IP; optional one-time TCP, TLS, HTTPS and DPI / Content probes via a selected agent |
 | **Interface** | English by default, Russian selectable; read-only non-sensitive runtime Settings |
 | **Notifications** | Optional Telegram Bot API and self-hosted Compass Userbot; persistent notification outbox |
 | **Deployment** | Docker Compose central + Nginx TLS/Basic Auth; Go agents managed by systemd |
@@ -149,13 +153,14 @@ The remote installer prompts for the token without echoing it and validates the 
 
 ## Dashboard
 
-The admin UI is a single native application with six sections:
+The admin UI is a single native application with seven sections:
 
 | Section | What you can do |
 |---|---|
 | **Overview** | View active service health, per-agent check results, RIP/RDO/EXC badges and a 24-hour timeline. Click **Details** on a service card to open its existing insights dialog: history, checks and latency information. |
 | **Hosts** | Use **Add host** to create a resource. Search/filter hosts, edit checks and assigned agents, set the RIP exception, or **Pause monitoring / Resume monitoring**. Delete a host when no longer needed. |
 | **Agents** | Inspect agent activity and assign custom two-character **Short names** or revert to **Auto**. |
+| **Inspect** | Check any hostname or IP instantly against cached central RIP/RDO lists; optionally queue one-time TCP, TLS, HTTPS and DPI / Content checks for one selected agent, then view the correlated results. |
 | **Blocklists** | Manage downloaded IP/CIDR and domain sources, see source health, update time, record counts and current matches. |
 | **History** | Filter and inspect recorded measurements by resource. |
 | **Settings** | Switch English/Russian and inspect an allowlisted, read-only runtime configuration summary. |
@@ -180,6 +185,41 @@ The initial Antifilter domain/CIDR sources are inserted on first migration, and 
 
 **Data privacy:** KVNRadar downloads feed files and performs membership checks locally. It does **not** send monitored resource names or IPs as feed lookup requests. A host's normal DNS queries may still leave the configured resolver.
 
+## Inspect: on-demand diagnostics
+
+**Inspect** (`#inspect`, introduced in **v0.6.5**) lets an administrator diagnose an arbitrary **hostname or IP address without adding it to Hosts or changing existing monitoring**.
+
+1. Open **Inspect**, enter a hostname/IP and the target port (`443` by default), then select **Inspect host**.
+2. The central server immediately checks the host against **locally cached, enabled RIP (IP/CIDR) and RDO (domain) feeds**. Results include `OK`, `BAN` or `UNKNOWN`, matched sources/CIDRs/domains and resolved IP addresses when available. Inspect does **not** refresh external feeds for each request.
+3. Optionally enable **Run one-time probes from a selected agent**, choose a configured agent and one or more of **TCP**, **TLS**, **HTTPS** and **DPI / Content**. The chosen port is used for these probes. HTTPS and DPI use HTTPS path `/`; DPI / Content expects **64 KiB** by default.
+4. The inspection is queued in central SQLite. The agent **pulls** the one-time task through its regular `/api/sync` session and returns its structured results on a subsequent sync. The UI displays **Queued → Sent to agent → Completed**, or **Timed out** when the job expires. This may take several minutes depending on the agent sync interval (often 300 seconds); it is not an immediate inbound connection from central to an agent.
+5. When available, the result shows each check's status, duration, received/expected bytes, HTTP status, errors and probe metadata. The page also displays the **15 most recent inspection requests**.
+
+> **Isolation:** Inspect uses unique job IDs to associate results with the correct request. Its measurements are held separately from ordinary availability history; one-time Inspect tests do **not** alter existing Hosts, availability timelines, incidents or Telegram/Compass notifications. Existing compatible Go agents require no new incoming ports.
+
+Agent jobs expire after **30 minutes**. An agent can have at most **three** pending inspection requests, preventing the one-shot queue from growing without limit. A `BAN` match is a blocklist observation, not proof of censorship or a failed network connection. The selected remote probe checks actual connectivity from **that agent's location**, which can differ from central.
+
+### Inspect screenshots
+
+![KVNRadar Inspect — central and agent test results](assets/screenshots/14-inspect-results.png)
+
+[Inspect form](assets/screenshots/10-inspect.png) · [Agent and test selection](assets/screenshots/11-inspect-agent-options.png) · [Queued](assets/screenshots/12-inspect-queued.png) · [Sent to agent](assets/screenshots/13-inspect-sent.png) · [Completed](assets/screenshots/14-inspect-results.png)
+
+## Screenshots
+
+The animated product tour above is made from browser captures of the **actual v0.6.5 admin UI using synthetic demo data**, not a live production deployment.
+
+| Section / capability | Screenshot |
+|---|---|
+| Overview | [Status cards and RIP/RDO](assets/screenshots/01-overview.png) |
+| Resource Details | [Latency, events and check history](assets/screenshots/02-resource-details.png) |
+| Hosts | [Host list](assets/screenshots/03-hosts.png) · [Pause / Resume](assets/screenshots/04-host-controls.png) · [Add host](assets/screenshots/05-add-host.png) |
+| Agents | [Agent status and short names](assets/screenshots/06-agents.png) |
+| Blocklists | [Source health](assets/screenshots/07-blocklists.png) · [Add source](assets/screenshots/08-add-source.png) · [Edit source](assets/screenshots/09-edit-source.png) |
+| Inspect | [Form](assets/screenshots/10-inspect.png) · [Agent checks](assets/screenshots/11-inspect-agent-options.png) · [Queued](assets/screenshots/12-inspect-queued.png) · [Dispatched](assets/screenshots/13-inspect-sent.png) · [Results](assets/screenshots/14-inspect-results.png) |
+| History | [Recorded measurements](assets/screenshots/15-history.png) |
+| Settings | [Read-only configuration and language](assets/screenshots/16-settings.png) · [Russian UI](assets/screenshots/17-russian.png) |
+
 ## Checks and status model
 
 | Check | What it tests |
@@ -194,7 +234,7 @@ The initial Antifilter domain/CIDR sources are inserted on first migration, and 
 | RIP | Central IP/CIDR feed matches for the host or its resolved IP addresses |
 | RDO | Central domain feed matches |
 
-RIP and RDO execute centrally, separately from agents. They can show `OK`, `BAN` or an unknown state; RIP additionally supports blue `EXC` when `rip_exempt` is enabled. **A blocklist match is a diagnostic observation, not evidence by itself of censorship or a specific connectivity failure.** RIP/RDO findings do not change availability (`Healthy`, `Degraded`, `Outage`, `No data`).
+RIP and RDO execute centrally, separately from agents, and Inspect can query those cached lists on demand. They can show `OK`, `BAN` or an unknown state; RIP additionally supports blue `EXC` when `rip_exempt` is enabled. **A blocklist match is a diagnostic observation, not evidence by itself of censorship or a specific connectivity failure.** RIP/RDO findings do not change availability (`Healthy`, `Degraded`, `Outage`, `No data`).
 
 HTTP and HTTPS destinations are configured per check, including ports and paths. Checks can be enabled or disabled independently on each host.
 
@@ -274,7 +314,7 @@ kvnradar/
 ├── config/                Sanitized configuration templates
 ├── deploy/                Nginx and systemd service files
 ├── scripts/               Bootstrap, build and release-audit scripts
-├── tests/                 Unit and smoke tests
+├── tests/                 Unit and smoke tests (including Inspect)
 ├── assets/                Screenshots and product-tour GIF
 ├── compose.yaml           Central + Nginx deployment
 ├── .env.example           Environment template (no secrets)
@@ -288,3 +328,7 @@ kvnradar/
 - Partial HTTP transfers, DNS failures or RIP/RDO matches are indicators requiring further investigation, not definitive identification of a blocking mechanism.
 - A fresh installation requires credentials, a valid HTTPS certificate and manual configuration of monitored hosts and agent IDs.
 - Legacy agent/service names are not automatically migrated by the new-install scripts.
+
+## License
+
+No `LICENSE` file is currently included in the repository. Choose and add a license before representing this project as having open-source reuse rights. Publishing source code alone does not grant a general license to reuse or redistribute it.
