@@ -2,7 +2,7 @@
 
 ![KVNRadar — Overview (English)](assets/KVNRadar-v0.5.9.1-overview-EN.png)
 
-**Self-hosted distributed infrastructure monitoring with independent network agents.**
+**Self-hosted distributed infrastructure for monitoring censorship blocks with independent network agents.**
 
 KVNRadar monitors reachability, DNS resolution, TCP connectivity, TLS, HTTP(S) availability, content-transfer anomalies and network routes from multiple independent Linux locations. 
 A central Python service coordinates lightweight Go agents, stores results in SQLite and provides a protected web dashboard. No VPN between agents and central is required.
