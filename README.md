@@ -12,8 +12,6 @@ KVNRadar monitors reachability, DNS resolution, TCP connectivity, TLS, HTTP(S), 
 ![docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 ![self-hosted](https://img.shields.io/badge/deployment-self--hosted-success)
 
-> **Source release:** Runtime credentials, certificates, live SQLite databases, downloaded blocklists and backups are not included. Generate credentials locally before deploying.
-
 ---
 
 ## Contents
@@ -28,9 +26,14 @@ KVNRadar monitors reachability, DNS resolution, TCP connectivity, TLS, HTTP(S), 
 - [Inspect: on-demand diagnostics](#inspect-on-demand-diagnostics)
 - [Screenshots](#screenshots)
 - [Checks and status model](#checks-and-status-model)
+- [Probe internals and DPI diagnostics](#probe-internals-and-dpi-diagnostics)
+- [Agent synchronization and offline buffering](#agent-synchronization-and-offline-buffering)
 - [Agent short names](#agent-short-names)
 - [Languages and settings](#languages-and-settings)
 - [Notifications](#notifications)
+- [Alert rules and delivery failures](#alert-rules-and-delivery-failures)
+- [Data retention and backups](#data-retention-and-backups)
+- [Troubleshooting](#troubleshooting)
 - [Configuration reference](#configuration-reference)
 - [Security](#security)
 - [Building and testing](#building-and-testing)
@@ -167,8 +170,6 @@ The admin UI is a single native application with seven sections:
 
 **Pause vs delete:** Pausing sets `resources.enabled=false` and stops scheduling checks for that resource, including central RIP/RDO scans. The resource, check configuration, RIP exception setting and existing measurement history remain in SQLite. Resume enables monitoring again. The Overview intentionally shows active resources; paused resources remain manageable under Hosts → Disabled.
 
-**Details moved in v0.6.4:** Open the existing Details dialog from the **Overview** card, not from the Hosts action row. The dialog is linked to the resource's technical ID rather than its display name.
-
 ## Blocklist source management
 
 Blocklist source settings are stored in **SQLite**, not in `.env` or a hardcoded Python source list. The Blocklists editor supports:
@@ -187,7 +188,7 @@ The initial Antifilter domain/CIDR sources are inserted on first migration, and 
 
 ## Inspect: on-demand diagnostics
 
-**Inspect** (`#inspect`, introduced in **v0.6.5**) lets an administrator diagnose an arbitrary **hostname or IP address without adding it to Hosts or changing existing monitoring**.
+**Inspect** lets an administrator diagnose an arbitrary **hostname or IP address without adding it to Hosts or changing existing monitoring**.
 
 1. Open **Inspect**, enter a hostname/IP and the target port (`443` by default), then select **Inspect host**.
 2. The central server immediately checks the host against **locally cached, enabled RIP (IP/CIDR) and RDO (domain) feeds**. Results include `OK`, `BAN` or `UNKNOWN`, matched sources/CIDRs/domains and resolved IP addresses when available. Inspect does **not** refresh external feeds for each request.
@@ -195,19 +196,9 @@ The initial Antifilter domain/CIDR sources are inserted on first migration, and 
 4. The inspection is queued in central SQLite. The agent **pulls** the one-time task through its regular `/api/sync` session and returns its structured results on a subsequent sync. The UI displays **Queued → Sent to agent → Completed**, or **Timed out** when the job expires. This may take several minutes depending on the agent sync interval (often 300 seconds); it is not an immediate inbound connection from central to an agent.
 5. When available, the result shows each check's status, duration, received/expected bytes, HTTP status, errors and probe metadata. The page also displays the **15 most recent inspection requests**.
 
-> **Isolation:** Inspect uses unique job IDs to associate results with the correct request. Its measurements are held separately from ordinary availability history; one-time Inspect tests do **not** alter existing Hosts, availability timelines, incidents or Telegram/Compass notifications. Existing compatible Go agents require no new incoming ports.
-
 Agent jobs expire after **30 minutes**. An agent can have at most **three** pending inspection requests, preventing the one-shot queue from growing without limit. A `BAN` match is a blocklist observation, not proof of censorship or a failed network connection. The selected remote probe checks actual connectivity from **that agent's location**, which can differ from central.
 
-### Inspect screenshots
-
-![KVNRadar Inspect — central and agent test results](assets/screenshots/14-inspect-results.png)
-
-[Inspect form](assets/screenshots/10-inspect.png) · [Agent and test selection](assets/screenshots/11-inspect-agent-options.png) · [Queued](assets/screenshots/12-inspect-queued.png) · [Sent to agent](assets/screenshots/13-inspect-sent.png) · [Completed](assets/screenshots/14-inspect-results.png)
-
 ## Screenshots
-
-The animated product tour above is made from browser captures of the **actual v0.6.5 admin UI using synthetic demo data**, not a live production deployment.
 
 | Section / capability | Screenshot |
 |---|---|
@@ -237,6 +228,38 @@ The animated product tour above is made from browser captures of the **actual v0
 RIP and RDO execute centrally, separately from agents, and Inspect can query those cached lists on demand. They can show `OK`, `BAN` or an unknown state; RIP additionally supports blue `EXC` when `rip_exempt` is enabled. **A blocklist match is a diagnostic observation, not evidence by itself of censorship or a specific connectivity failure.** RIP/RDO findings do not change availability (`Healthy`, `Degraded`, `Outage`, `No data`).
 
 HTTP and HTTPS destinations are configured per check, including ports and paths. Checks can be enabled or disabled independently on each host.
+
+## Probe internals and DPI diagnostics
+
+Individual checks are enabled per resource. Plain HTTP (`http_plain`) and HTTPS (`http_status`) use the agent's status-only HTTP probe, with different URL schemes. `http_content` runs an HTTPS transfer probe that reads up to the required `min_bytes` (default **65,536 bytes**) in **one request**. HTTP redirects are not followed: a status-only response in the **200-399** range is successful even if a subsequent redirect destination is unreachable.
+
+The content probe records received bytes, the advertised Content-Length, HTTP status, duration and milestone timings (`milestones_ms`) as it crosses **4, 8, 16, 20, 32, 64 and 128 KiB**. Not all thresholds will be reached by every probe.
+
+| Probe result | Meaning |
+|---|---|
+| `OK_FULL` | Received at least the requested byte count |
+| `SHORT_RESPONSE` | Response ended cleanly but with fewer than the requested bytes; this may be normal for small objects |
+| `PARTIAL_TRANSFER` | Transfer was interrupted or failed before the requested bytes arrived |
+| `TRANSFER_TIMEOUT` | Transfer timed out before reaching the requested bytes |
+| `STALL_16K` | Timeout after approximately 12-24 KB was received |
+| `CONTENT_MISMATCH` | Optional SHA-256 comparison failed after enough bytes were received |
+| `HTTP_STATUS` | HTTP status outside the accepted 200-399 range |
+| `HTTP_CONNECT_FAIL` | HTTP connection/request failed before a valid response |
+
+**Intentional alert policy:** `SHORT_RESPONSE` is shown as a warning in the dashboard but is treated as **non-alerting** by the incident notification logic. This is by design, not an omitted notification. A short legitimate response or a `STALL_16K` observation alone is not conclusive proof of network censorship.
+
+TLS checks can report `TLS_CERT_EXPIRING` for certificates with fewer than **14 days** remaining. ICMP uses two sequential pings. Traceroute is limited to **12 hops**.
+
+## Agent synchronization and offline buffering
+
+The Go agent always initiates communication with Central: it first sends pending measurements to `POST /api/sync`, receives its current tasks, runs checks that are due, writes results to local state, then sleeps. New probe results are therefore usually delivered at the **next** sync rather than immediately after the check.
+
+- `sync_seconds` is clamped to a minimum of **60 seconds**; the sample configuration commonly uses 300. Individual checks have their own intervals.
+- Pending events and last-run timestamps are durably saved in `state.json` inside `state_dir`. A network failure or ordinary process restart does not discard them. Do not delete this file while diagnosing missing deliveries.
+- Each sync submits **at most 100 pending events**, not a 100-event total storage limit. Central returns `accepted` IDs; the agent removes acknowledged events and retains the rest for later syncs. Central rejects requests containing more than 100 events.
+- Dashboard agent online status is based on the last successful sync (approximately **10 minutes** of freshness). An offline indicator **does not currently trigger an independent offline-agent notification**.
+
+The control connection uses HTTPS with **TLS 1.3 only** (plain HTTP is accepted only for loopback testing). The agent supports an additional trusted root via `ca_file`. These control-plane rules do not impose TLS 1.3 on every monitored endpoint. The default Nginx deployment uses the same certificate on ports **9443**, **18080** and **18081**; renewals must preserve trust at all three endpoints.
 
 ## Agent short names
 
@@ -278,6 +301,56 @@ When configured, messages may contain hostnames, IP addresses and incident detai
 
 **Email preview:** open [`assets/email-alert-preview.html`](assets/email-alert-preview.html) locally to inspect the sample template. The email contains event details, a colored severity label and an optional dashboard link; the actual email is rendered dynamically from the notification event. Configure `.env` and rebuild/recreate `central` to activate SMTP. Existing Telegram and Compass integrations remain unchanged. `TELEGRAM_API_BASE_URL` may be set to a trusted compatible HTTPS endpoint. Do not store actual notification credentials in GitHub. Restart `central` after modifying `.env`.
 
+## Alert rules and delivery failures
+
+Notifications are generated on meaningful **per-agent, per-check status transitions**, not for every periodic sample. Central RIP/RDO matches can produce separate blocklist-change notifications. There is no acknowledgement/escalation workflow or time-triggered offline-agent incident in the current code. `SHORT_RESPONSE` is intentionally in the non-alerting group, although it is a yellow warning in the UI.
+
+The SQLite `outbox` dispatcher checks for due messages approximately **every 10 seconds**, processing up to **10** per pass. Successful deliveries receive a `delivered_at` timestamp. If a channel is not configured, its message remains queued and is reconsidered in **one hour**. For actual delivery errors, retry delay is `min(3600, 30 * 2**min(attempts, 7))` seconds: first failure **60 s**, then **120 s**, **240 s**, and so on, capped at **one hour**.
+
+**History -> Notification delivery failures** records only failed Email, Telegram and Compass delivery attempts. The view shows up to **250 newest entries**, with **15 per page**; the database keeps up to **5,000** failure rows. Stored fields are time, channel, outbox ID, attempt number and exception **type**, not the message body or potentially sensitive exception text. Successful deliveries are not listed. No visible failures does not imply all channels are configured or an incident was generated.
+
+## Data retention and backups
+
+SQLite is stored in the persistent Compose-mounted `./data` directory. The current application does not apply a general age-based pruning policy to regular measurements or delivered `outbox` entries. Monitor its size and free disk space.
+
+| Category | Current behavior |
+|---|---|
+| Regular `measurements` | No automatic age-based pruning |
+| Central RIP/RDO check history | Pruned after **90 days** |
+| Failed notification deliveries | Latest **5,000** retained in SQLite; latest **250** displayed |
+| UI measurement history | At most **250** selected records, **15 per page**; a display/query limit, not database retention |
+| `outbox` (delivered and pending) | No general age-based deletion in the dispatcher |
+| Agent pending queue | Persisted locally; at most **100 submitted per sync**, not a local-storage cap |
+
+Back up SQLite with its **online backup API**, or stop the Central container before copying database files; an arbitrary live-file copy may be inconsistent. Preserve `.env`, `config/agents.json`, `auth/users`, and any active TLS certificate/private key required for restoration. Backups contain credentials and operational details: restrict access, never commit them to GitHub, and test restoration on an isolated instance.
+
+A resource's `public` field is stored in SQLite, but enabling it does **not** publish a page in the standard Compose deployment. The Overview remains within the authenticated admin UI.
+
+## Troubleshooting
+
+Check container status and recent Central/Nginx logs:
+
+```bash
+docker compose ps
+docker compose logs --tail=100 central
+docker compose logs --tail=100 nginx
+```
+
+On an agent host:
+
+```bash
+sudo systemctl status kvnradar-agent
+sudo journalctl -u kvnradar-agent -n 100 --no-pager
+```
+
+- **No agent measurements:** verify the exact agent ID and token in local config, the Central URL `https://YOUR_HOST:18080`, outbound firewall rules, TLS trust, `sync_seconds` and writable `state_dir`. Events produced after a sync are not transmitted until a later cycle.
+- **TLS handshake or verification errors:** verify the hostname, certificate chain and trusted issuer on the agent. Use `ca_file` for a private CA where appropriate; do not permanently disable TLS verification.
+- **Missing alerts:** first check whether a status transition is eligible; `SHORT_RESPONSE` is intentionally non-alerting and a disconnected agent does not generate a separate timed alert. Then check private `.env` channel configuration, the History failure panel and Central logs.
+- **Blocklist errors:** fetch URLs must be publicly reachable HTTPS endpoints on TCP 443. Private targets and redirects are rejected; failed downloads retain previous valid cached data.
+- **Incomplete History:** a paused check, offline agent or stale sample is different from a 250-record UI history limit. The underlying measurements may still be in SQLite.
+
+Central implements `/health`, but the standard Nginx **agent-sync port** exposes only `/api/sync`; do not assume `/health` is publicly available on port 18080.
+
 ## Configuration reference
 
 | Setting | Purpose |
@@ -318,7 +391,7 @@ python3 tests/smoke.py
 python3 scripts/check-release.py .
 ```
 
-Node.js is needed for optional local syntax checking only; it is **not** required to run the central container or to install an agent. The smoke tests run local fixtures; they do not verify real-world network censorship behavior.
+Node.js is needed for optional local syntax checking only; it is **not** required to run the central container or to install an agent. The end-to-end `tests/smoke.py` script builds and launches the Go agent, Python Central service and a temporary local HTTPS fixture. It exercises full, short and interrupted responses, pending-event persistence, agent restart, Central acknowledgements and SQLite storage. It requires Go 1.23+ and OpenSSL. Tests use only local fixtures and cannot validate real-world network censorship behavior.
 
 ## Repository layout
 
@@ -344,8 +417,3 @@ kvnradar/
 - Agent results represent the specific networks where agents run, not the availability from every ISP or country.
 - Partial HTTP transfers, DNS failures or RIP/RDO matches are indicators requiring further investigation, not definitive identification of a blocking mechanism.
 - A fresh installation requires credentials, a valid HTTPS certificate and manual configuration of monitored hosts and agent IDs.
-- Legacy agent/service names are not automatically migrated by the new-install scripts.
-
-## License
-
-No `LICENSE` file is currently included in the repository. Choose and add a license before representing this project as having open-source reuse rights. Publishing source code alone does not grant a general license to reuse or redistribute it.
