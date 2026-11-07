@@ -60,8 +60,6 @@ flowchart LR
   C -.->|optional outbound| TG[Telegram / Compass]
 ```
 
-The admin `Overview` is **part of the central web application** (`central/ui.html`, `central/static/private-overview.js` and `central/private_status.py`). It is not an iframe or reverse proxy of a separate public status page.
-
 ## Requirements
 
 - **Central:** Linux server, Docker Engine and Docker Compose v2, OpenSSL, Python 3 for bootstrap scripts, a domain with a trusted TLS certificate for production.
