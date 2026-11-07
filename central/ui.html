@@ -101,10 +101,18 @@
         <div class="toolbar surface">
           <select id="history-resource"><option value="">All resources</option></select>
           <button class="pill-btn" id="history-refresh"><span data-icon="refresh-cw"></span>Refresh</button>
-          <span id="history-count" class="toolbar-meta">Up to 500 records</span>
+          <span id="history-count" class="toolbar-meta">Last 250 records</span>
         </div>
         <section class="soft-card">
           <div id="history-list"></div>
+          <nav id="history-pages" class="history-pagination" aria-label="Measurement history pages"></nav>
+        </section>
+        <section class="soft-card notification-failures-panel">
+          <div class="notification-failures-head"><div><h3 id="notification-failures-title">Notification delivery failures</h3>
+          <p id="notification-failures-description">Only failed Email, Telegram and Compass delivery attempts. Successful attempts are not logged here.</p></div>
+          <button class="pill-btn" id="notification-failures-refresh" type="button">Refresh</button></div>
+          <div id="notification-failures" aria-live="polite"></div>
+          <nav id="notification-failures-pages" class="history-pagination" aria-label="Notification failure pages"></nav>
         </section>
       </section>
       <section id="page-settings" class="page">
@@ -124,7 +132,7 @@
         </div>
       </section>
     </main>
-    <footer class="app-footer" aria-label="KVNRadar version">KVNRadar <span>v0.6.5</span></footer>
+    <footer class="app-footer" aria-label="KVNRadar version">KVNRadar <span>v0.6.8</span></footer>
   </div>
 
   <dialog id="blocklist-dialog" class="modal">
@@ -186,10 +194,23 @@
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <style>
+  .notification-failures-panel{margin-top:18px;padding:20px}
+  .notification-failures-head{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;margin-bottom:14px}
+  .notification-failures-head h3{margin:0 0 6px;font-size:16px}
+  .notification-failures-head p{margin:0;color:#8d98a8;font-size:12px;line-height:1.5}
+  .notification-failures-table{overflow-x:auto}
+  .notification-failures-table table{width:100%;border-collapse:collapse;text-align:left;font-size:13px}
+  .notification-failures-table th,.notification-failures-table td{padding:10px 12px;border-bottom:1px solid #2e3946}
+  .notification-failures-table th{color:#97a5b7;font-weight:600}
+  .notification-failures-table .channel{font-weight:700;color:#ffac7d}
+  .notification-failures-empty{color:#7f958c;padding:16px 0;font-size:13px}
+  </style>
   <script defer src="/ui/static/i18n.js"></script>
   <script defer src="/ui/static/app.js"></script>
   <script defer src="/ui/static/private-overview.js"></script>
   <script defer src="/ui/static/settings.js"></script>
   <script defer src="/ui/static/inspect.js"></script>
+  <script defer src="/ui/static/notification-history.js"></script>
 </body>
 </html>

@@ -165,3 +165,27 @@ a{text-decoration:none;color:inherit}
 .expanded-actions .host-pause{background:#3d3016;color:#ffd58a;border:1px solid #8b6b23}
 .expanded-actions .host-resume{background:#126d35;color:#fff;border:1px solid #268f4d}
 @media (max-width:720px){.host-page-heading #add-host{margin-left:0;width:100%;justify-content:center}}
+
+/* KVNRadar v0.6.8: paginated History and semantic status colors */
+.history-table-wrap,.notification-failures-table{overflow-x:auto}
+.history-pagination{display:flex;flex-direction:column;align-items:center;gap:10px;padding:18px 8px 5px}
+.history-pagination:empty{display:none}
+.history-pagination-info{font-size:12px;color:#737d77;text-align:center}
+.history-pagination-buttons{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:5px}
+.history-page-btn{background:#fff;color:#404a43;border:1px solid #dbe3dd;border-radius:9px;min-width:32px;height:32px;padding:0 9px;font-size:12px;font-weight:600;cursor:pointer}
+.history-page-btn:hover:not(:disabled){background:#edf8f0;border-color:#9dd8af}
+.history-page-btn.active{color:#fff;background:#136d39;border-color:#136d39}
+.history-page-btn:disabled{opacity:.32;cursor:default}
+.history-row td{transition:background .1s}
+.history-row-ok td{background:#f1fbf5}
+.history-row-warn td{background:#fffbef}
+.history-row-fail td{background:#fff2f1}
+.history-row-unknown td{background:#f7f7f7}
+.history-status{display:inline-block;border-radius:999px;padding:5px 9px;font-size:12px;font-weight:700;white-space:nowrap}
+.history-status-ok{background:#d9f6e4;color:#16703b}
+.history-status-warn{background:#fff0be;color:#93620c}
+.history-status-fail{background:#ffd9d7;color:#aa2c25}
+.history-status-unknown{background:#e8e8e8;color:#555}
+.notification-failure-row td{background:#fff0ef!important;color:#962d2a!important;border-bottom-color:#f5d2cf!important}
+.notification-failure-row .channel{color:#b82d25!important}
+@media(max-width:760px){.history-pagination{padding:12px 0}.history-page-btn{min-width:29px;height:30px;padding:0 7px}.history-table{min-width:680px}}

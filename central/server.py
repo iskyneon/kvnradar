@@ -3,6 +3,7 @@
 import base64
 import hmac
 import json
+import re
 import ipaddress
 import os
 import sqlite3
@@ -63,6 +64,13 @@ def initdb():
           id INTEGER PRIMARY KEY AUTOINCREMENT, channel TEXT NOT NULL,
           message TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
           next_attempt INTEGER NOT NULL DEFAULT 0, delivered_at TEXT);
+        CREATE TABLE IF NOT EXISTS notification_failures (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          occurred_at TEXT NOT NULL, outbox_id INTEGER NOT NULL,
+          channel TEXT NOT NULL CHECK(channel IN ('email','telegram','compass')),
+          attempt INTEGER NOT NULL, error_type TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS notification_failures_recent
+          ON notification_failures(id DESC);
         ''')
         # KVNRADAR_PUBLIC_COLUMN_V048: opt-in publication; existing hosts stay private.
         if not any(col[1] == 'public' for col in c.execute('PRAGMA table_info(resources)')):
@@ -329,10 +337,19 @@ def dispatch_forever():
                         else:
                             c.execute('UPDATE outbox SET delivered_at=? WHERE id=?',(now(),row['id']))
                 except Exception as e:
-                    print('notification error:',row['channel'],type(e).__name__ if row['channel']=='email' else str(e)[:160], flush=True)
+                    print('notification error:',row['channel'],type(e).__name__,flush=True)
                     with LOCK, connect() as c:
                         attempts = row['attempts']+1
+                        # Store metadata only: exception messages may contain secrets,
+                        # email addresses, URLs, or fragments of server responses.
+                        failure_type = type(e).__name__
+                        c.execute("""INSERT INTO notification_failures
+                          (occurred_at,outbox_id,channel,attempt,error_type)
+                          VALUES(?,?,?,?,?)""",
+                          (now(),row['id'],row['channel'],attempts,failure_type))
                         c.execute('UPDATE outbox SET attempts=?,next_attempt=? WHERE id=?',(attempts,int(time.time())+min(3600,30*(2**min(attempts,7))),row['id']))
+                        # Bound retention and database growth independently of outbox.
+                        c.execute("DELETE FROM notification_failures WHERE id NOT IN (SELECT id FROM notification_failures ORDER BY id DESC LIMIT 5000)")
         except Exception as e: print('dispatcher error:',str(e),flush=True)
         time.sleep(10)
 
@@ -475,7 +492,23 @@ def readonly_environment():
         except (ValueError, TypeError):
             value = 'not set'
         result.append({'key':key,'value':value,'source':'environment' if raw else 'default'})
-    return {'version':'0.6.6','entries':result,
+    # Explicitly permitted SMTP metadata. Never expose username, password,
+    # recipient list, SMTP URL, auth details or raw environment values.
+    smtp_host = os.environ.get('SMTP_HOST', '').strip()
+    if not re.fullmatch(r'[A-Za-z0-9.:-]{1,253}',smtp_host):
+        smtp_host = 'not set'
+    smtp_port = os.environ.get('SMTP_PORT','587').strip()
+    if not smtp_port.isascii() or not smtp_port.isdecimal() or not 1 <= int(smtp_port) <= 65535:
+        smtp_port = 'invalid'
+    smtp_mode = os.environ.get('SMTP_TLS_MODE','starttls').strip().lower()
+    if smtp_mode not in ('starttls','ssl'): smtp_mode = 'invalid'
+    smtp_from = os.environ.get('SMTP_FROM','').strip()
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[A-Za-z]{2,63}",smtp_from) or len(smtp_from)>254:
+        smtp_from = 'not set'
+    for key,value in (('SMTP_HOST',smtp_host),('SMTP_PORT',smtp_port),
+                      ('SMTP_TLS_MODE',smtp_mode),('SMTP_FROM',smtp_from)):
+        result.append({'key':key,'value':value,'source':'environment' if key in os.environ else 'default'})
+    return {'version':'0.6.8','entries':result,
             'notifications':{'compass':bool(os.getenv('COMPASS_BASE_URL') and os.getenv('COMPASS_BOT_TOKEN') and os.getenv('COMPASS_GROUP_ID')),
                              'telegram':bool(os.getenv('TELEGRAM_TOKEN') and os.getenv('TELEGRAM_CHAT_ID')),
                              'email':email_notifications.enabled()}}
@@ -584,7 +617,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(400,{'error':str(e)[:160]})
 
     def do_GET(self):
-        if self.path in ("/ui/static/app.css", "/ui/static/app.js", "/ui/static/private-overview.js", "/ui/static/private-overview.css", "/ui/static/i18n.js", "/ui/static/settings.js", "/ui/static/inspect.js", "/ui/static/inspect.css"):
+        if self.path in ("/ui/static/app.css", "/ui/static/app.js", "/ui/static/private-overview.js", "/ui/static/private-overview.css", "/ui/static/i18n.js", "/ui/static/settings.js", "/ui/static/inspect.js", "/ui/static/inspect.css", "/ui/static/notification-history.js"):
             name = self.path.rsplit("/", 1)[-1]
             path = Path("/app/static") / name
             try:
@@ -610,6 +643,11 @@ class Handler(BaseHTTPRequestHandler):
             if urlparse(self.path).path != '/ui/api/inspect': return self.reply(404,{'error':'not found'})
             job=inspect_jobs.read_job(connect,q.get('id',[''])[0])
             return self.reply(200,{'job':job}) if job else self.reply(404,{'error':'inspection not found'})
+        if self.path=='/ui/api/notification-failures':
+            with LOCK,connect() as c:
+                rows=[dict(r) for r in c.execute("""SELECT id,occurred_at,outbox_id,channel,attempt,error_type
+                    FROM notification_failures ORDER BY id DESC LIMIT 250""")]
+            return self.reply(200,{'failures':rows})
         if self.path=='/ui/api/settings': return self.reply(200,readonly_environment())
         if self.path=='/ui/api/private-status':
             import private_status
@@ -630,7 +668,7 @@ class Handler(BaseHTTPRequestHandler):
             rid=q.get('resource',[''])[0]
             with LOCK,connect() as c:
                 if rid:
-                    rows=[dict(x) for x in c.execute('SELECT * FROM measurements WHERE target LIKE ? ORDER BY received_at DESC,rowid DESC LIMIT 500',(rid+'--%',))]
+                    rows=[dict(x) for x in c.execute('SELECT * FROM measurements WHERE target LIKE ? ORDER BY received_at DESC,rowid DESC LIMIT 250',(rid+'--%',))]
                 else:
                     rows=[dict(x) for x in c.execute('SELECT * FROM measurements ORDER BY received_at DESC,rowid DESC LIMIT 250')]
             return self.reply(200,{'results':rows})
