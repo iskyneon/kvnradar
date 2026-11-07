@@ -2,10 +2,10 @@
 
 ![KVNRadar — Product Tour](assets/KVNRadar-v0.6.4-tour.gif)
 
-**Self-hosted distributed infrastructure for monitoring censorship blocks with independent network agents.**
+**Self-hosted distributed infrastructure monitoring and network-blocking diagnostics.**
 
-KVNRadar monitors reachability, DNS resolution, TCP connectivity, TLS, HTTP(S) availability, content-transfer anomalies and network routes from multiple independent Linux locations. 
-A central Python service coordinates lightweight Go agents, stores results in SQLite and provides a protected web dashboard. No VPN between agents and central is required.
+KVNRadar monitors reachability, DNS resolution, TCP connectivity, TLS, HTTP(S), content-transfer anomalies and network routes from multiple independent Linux locations. 
+A central Python service coordinates lightweight Go agents, stores results in SQLite and provides an authenticated web dashboard. Agents pull tasks from central; no VPN or inbound agent listener is required.
 
 ![version](https://img.shields.io/badge/version-0.6.4-blue)
 ![platform](https://img.shields.io/badge/platform-Linux-informational)
@@ -22,11 +22,14 @@ A central Python service coordinates lightweight Go agents, stores results in SQ
 - [Requirements](#requirements)
 - [Quick start](#quick-start)
 - [Agent installation](#agent-installation)
-- [Checks and status model](#checks-and-status-model)
 - [Dashboard](#dashboard)
+- [Blocklist source management](#blocklist-source-management)
+- [Checks and status model](#checks-and-status-model)
+- [Agent short names](#agent-short-names)
+- [Languages and settings](#languages-and-settings)
 - [Notifications](#notifications)
-- [Security](#security)
 - [Configuration reference](#configuration-reference)
+- [Security](#security)
 - [Building and testing](#building-and-testing)
 - [Repository layout](#repository-layout)
 - [Compatibility and limitations](#compatibility-and-limitations)
@@ -36,128 +39,180 @@ A central Python service coordinates lightweight Go agents, stores results in SQ
 
 | Area | Capabilities |
 |---|---|
-| **Monitoring** | ICMP ping, DNS, TCP, TLS, HTTP, HTTPS, HTTP content transfer, traceroute |
-| **Distributed** | Agents in separate locations/providers, each polling central for tasks, no incoming agent listener |
-| **Central** | Python 3.13, SQLite persistence, agent tokens, resource and probe configuration, history |
-| **Availability** | Status by probe and agent, recent measurement timeline, per-resource Overview |
-| **Blocklists** | Central-only RIP (IP/CIDR) and RDO (domain) checks with independently downloaded local lists |
-| **RIP exceptions** | Per-resource `rip_exempt` with distinct blue `EXC`; RDO still runs |
-| **Notifications** | Optional Telegram Bot API and on-premises Compass Userbot; durable outbox |
-| **Deployment** | Docker Compose central + Nginx TLS/basic authentication; Go agents via systemd |
-| **Privacy** | Self-hosted status storage; blocklist provider requests do not include monitored hostnames |
+| **Distributed checks** | ICMP, DNS, TCP, TLS, HTTP/HTTPS, content-transfer diagnostics and traceroute from independent agents |
+| **Monitoring lifecycle** | Add/edit hosts; pause or resume monitoring without deleting configuration or measurement history |
+| **Overview** | Per-service state, RIP/RDO badges, agent-level check results, 24-hour timeline and **Details** dialog |
+| **Blocklists** | Independently maintained RIP (IP/CIDR) and RDO (domain) feeds; add, edit, disable, update and delete sources in the dashboard |
+| **RIP exclusions** | Per-resource `rip_exempt` produces blue `EXC` while retaining independent RDO checks |
+| **Agents** | Two-character display labels generated automatically or overridden in **Agents** without changing agent IDs/tokens |
+| **Interface** | English by default, Russian selectable; read-only non-sensitive runtime Settings |
+| **Notifications** | Optional Telegram Bot API and self-hosted Compass Userbot; persistent notification outbox |
+| **Deployment** | Docker Compose central + Nginx TLS/Basic Auth; Go agents managed by systemd |
+| **Privacy** | Local result storage and blocklist matching; monitored hostnames are not sent to blocklist-feed providers |
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  A1[Agent — site A] -->|HTTPS short sync :18080| N[Nginx TLS]
-  A2[Agent — site B] -->|HTTPS short sync :18080| N
-  A3[Agent — site C] -->|HTTPS short sync :18080| N
-  Browser[Administrator] -->|HTTPS Basic Auth :9443| N
-  N --> C[Central Python API]
+  A1[Agent: site A] -->|HTTPS task sync :18080| N[Nginx TLS]
+  A2[Agent: site B] -->|HTTPS task sync :18080| N
+  A3[Agent: site C] -->|HTTPS task sync :18080| N
+  Browser[Administrator] -->|HTTPS + Basic Auth :9443| N
+  N --> C[Python central API]
   C --> DB[(SQLite)]
-  C --> BL[Local RIP / RDO lists]
-  C -.->|optional outbound| TG[Telegram / Compass]
+  C --> BL[Locally cached RIP/RDO lists]
+  C -.->|Optional outbound alerts| TG[Telegram / Compass]
 ```
+
+- Agents **pull** work and submit results; central does not initiate connections to agents.
+- The native Overview is rendered inside the authenticated admin UI. **There is no separate public status page in the standard Compose deployment.**
+- The web dashboard and the agent API use different listening ports and authentication mechanisms.
 
 ## Requirements
 
-- **Central:** Linux server, Docker Engine and Docker Compose v2, OpenSSL, Python 3 for bootstrap scripts, a domain with a trusted TLS certificate for production.
-- **Agents:** Linux amd64 or arm64, systemd, `iputils-ping`, `traceroute`, CA certificates, outbound HTTPS to central on TCP 18080.
-- **Building agents:** Go (version compatible with `agent/go.mod`; current source uses the standard library).
-- **Network:** TCP **9443** for authenticated administration, **18080** for agent sync, optional **18081** to distribute agent binaries. Restrict administrative access by firewall/IP ACL.
+- **Central:** Linux, Docker Engine + Docker Compose v2, OpenSSL and Python 3 for bootstrap; a trusted HTTPS certificate for production.
+- **Agents:** Linux amd64 or arm64 with systemd, `iputils-ping`, `traceroute`, CA certificates, and outbound HTTPS to the central service on TCP 18080.
+- **Building Go agents:** compatible Go toolchain as specified in `agent/go.mod`.
+- **Ports:** TCP 9443 for the admin panel, 18080 for agent task sync, and optionally 18081 for agent binary distribution. The standard Compose file does not publish 443.
 
 ## Quick start
 
+Clone the repository, then prepare local credentials and start the central services:
+
 ```bash
-# 1. Clone or unpack the source distribution
+git clone https://github.com/iskyneon/kvnradar.git
 cd kvnradar
 
-# 2. Prepare instance-only credentials/configs and a temporary certificate
+ # Creates local config, randomized example-agent tokens,
+ # HTTP Basic Auth credentials and a temporary self-signed certificate.
 sudo ./scripts/setup-central.sh
 
-# 3. Replace certs/fullchain.pem and certs/privkey.pem with a trusted certificate
-#    for your actual public hostname BEFORE production exposure.
-
-# 4. Optional: set up notification integrations in .env
-# 5. Start containers
+ # Before production use, replace certs/fullchain.pem and certs/privkey.pem
+ # with a trusted certificate for your actual central hostname.
 sudo docker compose up -d --build
 sudo docker compose ps
 sudo docker compose logs --tail=100 central
 ```
 
-`setup-central.sh` creates `.env`, `config/agents.json`, `config/targets.json`, `auth/users` and `certs/` **locally**, with strict file permissions. It generates random tokens for the five sample agent IDs and prompts for a dashboard password. These files are excluded by `.gitignore`. Replace the temporary 14-day self-signed certificate before allowing production clients to connect; agents verify certificates.
+The setup script creates `.env`, `config/agents.json`, `config/targets.json`, `auth/users` and `certs/` locally, with restrictive permissions. It prompts for an admin username/password and generates a temporary **14-day** certificate. The initial `config/agents.example.json` defines **two example agent IDs** (`agent-a`, `agent-b`) whose placeholder tokens are replaced with random ones. You can add your own agent IDs and unique tokens to `config/agents.json`.
 
-The initial legacy `targets.json` contains no example live targets. Add resources using **Hosts → Add** in the admin interface. To keep your own agent IDs, edit `config/agents.json` before deployment and generate a separate long random token for every agent.
+**Note:** The sample certificate uses `radar.example.com`. Install a certificate trusted by your agents and browsers for the actual hostname *before* connecting them. Certificate verification should not be disabled.
 
-**Administration:** `https://YOUR_HOST:9443/` (Basic Auth).
+| Endpoint | Address | Authentication |
+|---|---|---|
+| Administrative UI | `https://YOUR_HOST:9443/` | HTTPS + HTTP Basic Auth (`auth/users`) |
+| Agent sync | `https://YOUR_HOST:18080/api/sync` | Per-agent token |
+| Optional agent distribution | `https://YOUR_HOST:18081/agent/` | Binary downloads / SHA256 checksums |
 
-**Agent task sync:** `https://YOUR_HOST:18080/api/sync` (per-agent token).
+The `auth/users` file is created automatically by `scripts/setup-central.sh` and mounted into Nginx through `compose.yaml`. Never commit it. Restrict TCP 9443 with a firewall or IP allowlist where possible.
 
-**Optional binary distribution:** `https://YOUR_HOST:18081/agent/` (no agent tokens exposed).
-
-Nginx TLS is configured in `deploy/nginx.conf`. On a shared host, confirm the published ports are not in use, and verify the Docker firewall/NAT policy. There is no need to expose 9443 broadly on the Internet.
+Once started, use **Hosts → Add host** to configure monitored resources. Initial example targets are not live production services.
 
 ## Agent installation
 
-Build Linux binaries locally or on a build host:
+Build the agent binaries:
 
 ```bash
 ./scripts/build-agents.sh
 # dist/kvnradar-agent-linux-amd64
 # dist/kvnradar-agent-linux-arm64
-# agent-dist/ contains the binaries and SHA256SUMS for optional HTTPS distribution
 ```
 
-On each monitored machine, use its own token from the central server's `config/agents.json` (never publish the full file). Example manual installation:
+On the target agent server, provide its configured ID and token from the central server's `config/agents.json`. The local installer uses a prepared JSON configuration and the matching binary:
 
 ```bash
 cp config/agent.example.json agent.json
-# Edit agent, token, server (https://YOUR_HOST:18080)
+# Set: agent, token, server (https://YOUR_HOST:18080)
 sudo ./scripts/install-agent.sh dist/kvnradar-agent-linux-amd64 agent.json
 sudo systemctl status kvnradar-agent
 sudo journalctl -u kvnradar-agent -f
 ```
 
-For ARM64 use `dist/kvnradar-agent-linux-arm64`. The standard service is **`kvnradar-agent.service`**. The agent binary is `/usr/local/bin/kvnradar-agent`, its config is `/etc/kvnradar/agent.json`, and persistent state is `/var/lib/kvnradar-agent`.
+Use `kvnradar-agent-linux-arm64` on ARM64 hosts. Installed paths:
 
-Alternatively, serve `agent-dist/` through port 18081, then on an agent:
+| Component | Path |
+|---|---|
+| systemd service | `kvnradar-agent.service` |
+| Executable | `/usr/local/bin/kvnradar-agent` |
+| Agent configuration | `/etc/kvnradar/agent.json` |
+| Pending results and state | `/var/lib/kvnradar-agent` |
+
+To use remote installation, first build and serve `agent-dist/` via port 18081; download and review `agent-dist/install.sh`, then run:
 
 ```bash
-# Download the bootstrap script securely, inspect it, then execute:
 sudo bash install.sh --name example-agent \
   --server https://YOUR_HOST:18080 \
   --dist https://YOUR_HOST:18081/agent
 ```
 
-The bootstrap prompts for the agent token without echoing it and verifies the downloaded binary against `SHA256SUMS`. The server URL and distribution URL **must** be adjusted for your installation; `radar.example.com` is a placeholder.
+The remote installer prompts for the token without echoing it and validates the downloaded binary against `SHA256SUMS`. These are **new-install** scripts; they do not automatically migrate older LG1 Watch services. Never place agent tokens in the repository.
+
+## Dashboard
+
+The admin UI is a single native application with six sections:
+
+| Section | What you can do |
+|---|---|
+| **Overview** | View active service health, per-agent check results, RIP/RDO/EXC badges and a 24-hour timeline. Click **Details** on a service card to open its existing insights dialog: history, checks and latency information. |
+| **Hosts** | Use **Add host** to create a resource. Search/filter hosts, edit checks and assigned agents, set the RIP exception, or **Pause monitoring / Resume monitoring**. Delete a host when no longer needed. |
+| **Agents** | Inspect agent activity and assign custom two-character **Short names** or revert to **Auto**. |
+| **Blocklists** | Manage downloaded IP/CIDR and domain sources, see source health, update time, record counts and current matches. |
+| **History** | Filter and inspect recorded measurements by resource. |
+| **Settings** | Switch English/Russian and inspect an allowlisted, read-only runtime configuration summary. |
+
+**Pause vs delete:** Pausing sets `resources.enabled=false` and stops scheduling checks for that resource, including central RIP/RDO scans. The resource, check configuration, RIP exception setting and existing measurement history remain in SQLite. Resume enables monitoring again. The Overview intentionally shows active resources; paused resources remain manageable under Hosts → Disabled.
+
+**Details moved in v0.6.4:** Open the existing Details dialog from the **Overview** card, not from the Hosts action row. The dialog is linked to the resource's technical ID rather than its display name.
+
+## Blocklist source management
+
+Blocklist source settings are stored in **SQLite**, not in `.env` or a hardcoded Python source list. The Blocklists editor supports:
+
+- **Add source** — supply a unique source ID, feed type (`Domain` or `IP/CIDR`) and HTTPS feed URL.
+- **Edit** — change the source definition and enabled state.
+- **Enable / Disable** — exclude a feed temporarily without deleting its configuration.
+- **Update now** — request an immediate feed refresh.
+- **Delete** — remove a feed from the active configuration.
+
+The initial Antifilter domain/CIDR sources are inserted on first migration, and then treated as editable sources. A deleted source is not recreated at each restart. The central scanner combines all enabled cached feeds of each type. A failed refresh retains the previously downloaded valid data; the source displays an error. Source changes trigger central checking without waiting for the next regular scan.
+
+**Fetch restrictions:** only HTTPS feeds on port 443, with validation of public destination IPs. The downloader rejects local/private destinations, URL credentials and redirects; environment HTTP proxies are not used. The response size is capped at 256 MiB. Source URLs must therefore be publicly reachable HTTPS endpoints; an internal-only feed is not supported by this downloader.
+
+**Data privacy:** KVNRadar downloads feed files and performs membership checks locally. It does **not** send monitored resource names or IPs as feed lookup requests. A host's normal DNS queries may still leave the configured resolver.
 
 ## Checks and status model
 
 | Check | What it tests |
 |---|---|
 | PING | ICMP responsiveness |
-| DNS | Resolver lookup |
-| TCP | Establishing a TCP connection to a configured port |
-| TLS | TLS handshake / connection checks |
-| HTTP / HTTPS | Protocol reachability and HTTP status |
-| DPI / Content | Received byte count, partial / truncated response, transfer anomalies |
-| TRACE | Network route from each agent |
-| RIP | IP addresses matched against central local IP/CIDR lists |
-| RDO | Domain names matched against central local domain lists |
+| DNS | DNS lookup from agent locations |
+| TCP | TCP connection to the configured host/port |
+| TLS | TLS connection/handshake |
+| HTTP / HTTPS | HTTP service reachability and status |
+| DPI / Content | Content transfer amount, truncation and short-response anomalies |
+| TRACE | Traceroute from agent locations |
+| RIP | Central IP/CIDR feed matches for the host or its resolved IP addresses |
+| RDO | Central domain feed matches |
 
-The central determines RIP/RDO statuses independently from the agents. `OK`, `BAN`, `EXC` (RIP-only) and unknown states are represented separately. **A blocklist match is an observation, not proof of a particular cause of network disruption.** RIP/RDO findings do not determine the service availability indicator.
+RIP and RDO execute centrally, separately from agents. They can show `OK`, `BAN` or an unknown state; RIP additionally supports blue `EXC` when `rip_exempt` is enabled. **A blocklist match is a diagnostic observation, not evidence by itself of censorship or a specific connectivity failure.** RIP/RDO findings do not change availability (`Healthy`, `Degraded`, `Outage`, `No data`).
 
-The source automatically fetches blocklist feeds defined in `central/blocklists.py` (including antifilter.download). See source/configuration and ensure redistribution terms of external feeds are respected. Raw downloaded data is not part of this repository.
+HTTP and HTTPS destinations are configured per check, including ports and paths. Checks can be enabled or disabled independently on each host.
 
-## Dashboard
+## Agent short names
 
-The protected dashboard provides **Overview**, **Hosts**, **Agents**, **Blocklists** and **History**. Its native Overview shows enabled resources, per-agent probe results and a 24-hour availability timeline. Host configuration supports independent 
-The admin interface requires HTTPS + HTTP Basic Auth. It does **not** provide MFA or multi-role authorization. Place it behind a firewall and preferably an IP allowlist or private administrative network.
+Each agent has an immutable technical ID used for authentication, assignments and history. KVNRadar automatically derives a **two-character uppercase display label from the first two Latin letters** of the ID. For example, `hetzner` → `HE`, `edge-west` → `ED` and `node-1` → `NO`.
+
+Under **Agents → Short name**, enter a custom two-character label and click **Save**, or click **Auto** to restore the generated label. Manual duplicates are rejected; automatic duplicates may still occur and can be resolved by customizing one of them. The short label appears across the dashboard but does not change the agent ID or token.
+
+## Languages and settings
+
+English is the default dashboard language. The language selector under **Settings → Interface language** offers **English** and **Русский**. The choice is stored in the current browser's localStorage, and changing it does not change other administrators' settings.
+
+The **Settings → Runtime configuration** panel is read-only. It shows a restricted set of non-secret values and whether supported notification integrations are configured. It does not expose `.env` contents, agent tokens, authentication passwords, API keys, group/chat identifiers or private URL paths/query parameters.
 
 ## Notifications
 
-Copy the sanitized template to `.env` (the setup script does this automatically). Supported variables:
+Optional Compass Userbot and Telegram integrations can send incident messages. Configure these in the local `.env`:
 
 ```dotenv
 COMPASS_BASE_URL=
@@ -168,27 +223,31 @@ TELEGRAM_CHAT_ID=
 TELEGRAM_API_BASE_URL=https://api.telegram.org
 ```
 
-All notification credentials are optional. When configured, messages can include hostnames, IP addresses and incident details; sending to Telegram shares those fields with Telegram. `TELEGRAM_API_BASE_URL` can point to a compatible trusted HTTPS endpoint. Never commit real tokens; use `.env` only locally. Restart the central container after changes to `.env`.
-
-## Security
-
-- **Never commit:** `.env`, `agent.json`, `config/agents.json`, authentication hashes, `certs/`, SQLite databases, blocklist cache or runtime backups.
-- **Use unique tokens** for each agent; do not reuse example placeholders.
-- **Protect the dashboard** on 9443 with TLS, strong Basic Auth credentials and a network allowlist.
-- **Use real certificates** before connecting agents; no automatic bypass of TLS validation.
+When configured, messages may contain hostnames, IP addresses and incident details. Sending to Telegram exposes those fields to the configured Telegram infrastructure. `TELEGRAM_API_BASE_URL` may be set to a trusted compatible HTTPS endpoint. Do not store actual notification credentials in GitHub. Restart `central` after modifying `.env`.
 
 ## Configuration reference
 
-| File / variable | Purpose |
+| Setting | Purpose |
 |---|---|
-| `.env.example` | Sanitized, documented optional notification and scan settings |
-| `config/agents.example.json` | Sample IDs with nonworking placeholder tokens |
-| `config/targets.example.json` | Empty initial legacy target manifest |
-| `config/agent.example.json` | Sample single-agent configuration |
-| `deploy/nginx.conf` | 9443 administration, 18080 agent API, 18081 optional binary distribution |
-| `CENTRAL_BLOCKLIST_INTERVAL` | Central RIP/RDO scan interval, seconds (default 300) |
-| `BLOCKLIST_UPDATE_SECONDS` | Local blocklist refresh interval, seconds (default 21600) |
-| `BLOCKLIST_RESOLVE_DNS` | Optional DNS resolution in older list matching path (default 0) |
+| `.env.example` | Non-secret template for optional notifications and tuning; copy to `.env` locally |
+| `config/agents.example.json` | Sample agent IDs with dummy tokens; local setup generates real tokens |
+| `config/agent.example.json` | Single-agent configuration template |
+| `config/targets.example.json` | Legacy initial target manifest; use Hosts in the UI to configure resources |
+| `deploy/nginx.conf` | Nginx TLS, Basic Auth and agent distribution endpoints |
+| `CENTRAL_BLOCKLIST_INTERVAL=300` | Regular central RIP/RDO matching interval, in seconds (minimum 60) |
+| `BLOCKLIST_UPDATE_SECONDS=21600` | Remote blocklist download interval, in seconds (minimum 900) |
+| `BLOCKLIST_RESOLVE_DNS=0` | DNS resolving in the additional Blocklist Hits path; **does not** disable resolution by the main RIP/RDO scanner |
+
+**Important:** `BLOCKLIST_RESOLVE_DNS` applies only to the auxiliary `blocklist_hits` matching path. The main RIP check has its own DNS-resolution behavior. Source URLs are edited in **Blocklists**, not through `.env`.
+
+## Security
+
+- **Keep private:** `.env`, `auth/users`, `config/agents.json`, per-agent `agent.json`, `certs/privkey.pem`, SQLite databases, cached blocklists and backups.
+- Use a **different long random token for every agent**. A display short name never becomes an authentication identity.
+- Protect the admin service on TCP **9443** using HTTPS, Basic Auth and, preferably, firewall/IP restrictions. The dashboard has no MFA or separate user roles.
+- Use trusted TLS certificates for both browser and agent connections; do not disable peer verification in production.
+- Remember that optional notification integrations send incident fields to their configured destination.
+- The standard deployment does not publish a public status page; do not expose a separate unauthenticated deployment inadvertently.
 
 ## Building and testing
 
@@ -202,51 +261,30 @@ python3 tests/smoke.py
 python3 scripts/check-release.py .
 ```
 
-Node.js is needed only for the optional local JavaScript syntax check, **not** to run central or install KVNRadar. The smoke test runs the native Go probe tests using local HTTP fixtures and does not require a prebuilt agent binary.
+Node.js is needed for optional local syntax checking only; it is **not** required to run the central container or to install an agent. The smoke tests run local fixtures; they do not verify real-world network censorship behavior.
 
 ## Repository layout
 
 ```text
 kvnradar/
 ├── agent/                 Go agent source
-├── agent-dist/            Optional secure agent bootstrap (generated binaries ignored)
-├── central/               Python API, embedded admin interface, blocklist processing
-│   └── static/            Dashboard JavaScript and CSS
+├── agent-dist/            Optional HTTPS agent installation and generated distribution files
+├── central/               Python API, dashboard, blocklist download and matching
+│   └── static/            CSS, JavaScript, localization and native Overview
 ├── config/                Sanitized configuration templates
-├── deploy/                Nginx + native KVNRadar systemd unit
-├── scripts/               Bootstrap, build, and release-audit scripts
+├── deploy/                Nginx and systemd service files
+├── scripts/               Bootstrap, build and release-audit scripts
 ├── tests/                 Unit and smoke tests
+├── assets/                Screenshots and product-tour GIF
 ├── compose.yaml           Central + Nginx deployment
-├── .env.example           Notification / tuning template; no real secrets
-├── .gitignore             Exclusion of runtime data and credentials
+├── .env.example           Environment template (no secrets)
+├── .gitignore             Runtime / credential exclusions
 └── README.md
 ```
 
 ## Compatibility and limitations
-Agent checks reflect network conditions from their specific hosting providers, not every residential ISP. A partial transfer cannot by itself identify censorship, routing failures or a throttling policy.
 
-## Languages and settings
-
-KVNRadar provides an English-first admin UI with **English** and **Русский**.
-Go to **Settings → Interface language** to switch languages. The choice is stored
-in browser localStorage and does not affect agents or other administrators.
-
-The **Settings → Runtime configuration** panel is read-only. The backend only
-returns an explicit allowlist of non-sensitive runtime options and notification
-availability. No tokens, passwords, API keys, chat/group identifiers, `.env`
-contents, or private URL paths/query strings are returned. Settings are served
-under the existing HTTPS Basic Auth protected `:9443` admin route.
-
-
-## Agent short names
-
-Each agent keeps its immutable technical ID for authentication, history and resource assignment.
-KVNRadar automatically derives a **two-character uppercase label** from the first two
-Latin letters of its ID (e.g. `digitalocean` → `DI`, `hetzner` → `HE`, `amazon` → `AM`).
-Go to **Agents → Short name** to set an alternative two-character label (letters
-or digits, e.g. `DI`, `HE`, `AM`). **Save** stores the override in SQLite;
-**Auto** resets it to the automatically generated value. The same label appears
-in Overview, Hosts, Agents and History. Existing IDs and API tokens are unchanged.
-For newly added agents the label appears automatically after their first sync.
-Manual duplicates are rejected; automatic duplicates can occur and should be
-resolved by editing one of the agents.
+- Agent results represent the specific networks where agents run, not the availability from every ISP or country.
+- Partial HTTP transfers, DNS failures or RIP/RDO matches are indicators requiring further investigation, not definitive identification of a blocking mechanism.
+- A fresh installation requires credentials, a valid HTTPS certificate and manual configuration of monitored hosts and agent IDs.
+- Legacy agent/service names are not automatically migrated by the new-install scripts.
