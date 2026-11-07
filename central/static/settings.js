@@ -11,7 +11,8 @@
   if(!config || !cached)return;
   const rows=[...(cached.entries||[]),
    {key:'COMPASS_NOTIFICATIONS',value:cached.notifications?.compass?'enabled':'disabled',source:'computed'},
-   {key:'TELEGRAM_NOTIFICATIONS',value:cached.notifications?.telegram?'enabled':'disabled',source:'computed'}];
+   {key:'TELEGRAM_NOTIFICATIONS',value:cached.notifications?.telegram?'enabled':'disabled',source:'computed'},
+   {key:'EMAIL_NOTIFICATIONS',value:cached.notifications?.email?'enabled':'disabled',source:'computed'}];
   config.innerHTML=rows.map(x=>`<div class="setting-row"><code>${escape(x.key)}</code><div class="setting-value" data-no-i18n>${escape(x.value==='enabled'?text('Enabled','Включено'):x.value==='disabled'?text('Disabled','Выключено'):x.value)}<small class="setting-source">${escape(x.source==='environment'?text('Environment','Окружение'):x.source==='default'?text('Default','По умолчанию'):text('Computed','Вычислено'))}</small></div></div>`).join('');
  }
  async function load(){if(cached){render();return}if(!config)return;try{const r=await fetch('/ui/api/settings',{credentials:'same-origin',cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);cached=await r.json();render()}catch(e){config.textContent=text('Cannot load settings: ','Не удалось загрузить настройки: ')+e.message}}

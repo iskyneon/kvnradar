@@ -14,6 +14,7 @@ from urllib.parse import urlparse, parse_qs
 import urllib.error
 import blocklists
 import agent_aliases
+import email_notifications
 import kvn_inspect as inspect_jobs
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -111,7 +112,7 @@ def initdb():
             c.execute('INSERT INTO settings(key,value) VALUES(?,?)',('resources_imported','1'))
 
 def enqueue(c, message):
-    for channel in ('compass', 'telegram'):
+    for channel in (('compass', 'telegram', 'email') if email_notifications.enabled() else ('compass', 'telegram')):
         c.execute('INSERT INTO outbox(channel,message) VALUES(?,?)', (channel, message))
 
 def process(c, agent, event):
@@ -283,6 +284,8 @@ def scan_forever():
         time.sleep(1800)
 
 def notify(channel, msg):
+    if channel == 'email':
+        return email_notifications.send(msg)
     if channel == 'telegram':
         token = os.getenv('TELEGRAM_TOKEN','')
         chat = os.getenv('TELEGRAM_CHAT_ID','')
@@ -326,7 +329,7 @@ def dispatch_forever():
                         else:
                             c.execute('UPDATE outbox SET delivered_at=? WHERE id=?',(now(),row['id']))
                 except Exception as e:
-                    print('notification error:',row['channel'],str(e)[:160], flush=True)
+                    print('notification error:',row['channel'],type(e).__name__ if row['channel']=='email' else str(e)[:160], flush=True)
                     with LOCK, connect() as c:
                         attempts = row['attempts']+1
                         c.execute('UPDATE outbox SET attempts=?,next_attempt=? WHERE id=?',(attempts,int(time.time())+min(3600,30*(2**min(attempts,7))),row['id']))
@@ -472,9 +475,10 @@ def readonly_environment():
         except (ValueError, TypeError):
             value = 'not set'
         result.append({'key':key,'value':value,'source':'environment' if raw else 'default'})
-    return {'version':'0.6.4','entries':result,
+    return {'version':'0.6.6','entries':result,
             'notifications':{'compass':bool(os.getenv('COMPASS_BASE_URL') and os.getenv('COMPASS_BOT_TOKEN') and os.getenv('COMPASS_GROUP_ID')),
-                             'telegram':bool(os.getenv('TELEGRAM_TOKEN') and os.getenv('TELEGRAM_CHAT_ID'))}}
+                             'telegram':bool(os.getenv('TELEGRAM_TOKEN') and os.getenv('TELEGRAM_CHAT_ID')),
+                             'email':email_notifications.enabled()}}
 
 class Handler(BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'

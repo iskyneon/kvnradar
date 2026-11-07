@@ -4,6 +4,7 @@ Feeds use direct, pinned-address HTTPS: no redirects, proxies, credentials,
 non-public IPs or DNS rebinding to internal services.
 """
 import hashlib
+import email_notifications
 import http.client
 import ipaddress
 import json
@@ -277,7 +278,7 @@ def scan_resources(dbconnect):
             new={(h['source'],h['match']) for h in hits}
             if new!=old and (old or new):
                 message='KVNRadar | BLOCKLIST CHANGE\nHost: '+r['host']+'\nMatches: '+(', '.join(m for _,m in new) or 'none')
-                for channel in ('compass','telegram'):
+                for channel in (('compass','telegram','email') if email_notifications.enabled() else ('compass','telegram')):
                     c.execute('INSERT INTO outbox(channel,message) VALUES(?,?)',(channel,message))
 
 

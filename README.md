@@ -6,7 +6,7 @@
 
 KVNRadar monitors reachability, DNS resolution, TCP connectivity, TLS, HTTP(S), content-transfer anomalies and network routes from multiple independent Linux locations. A central Python service coordinates lightweight Go agents, stores results in SQLite and provides an authenticated web dashboard. Agents pull tasks from central; no VPN or inbound agent listener is required.
 
-![version](https://img.shields.io/badge/version-0.6.5-blue)
+![version](https://img.shields.io/badge/version-0.6.6-blue)
 ![platform](https://img.shields.io/badge/platform-Linux-informational)
 ![architecture](https://img.shields.io/badge/agent-amd64%20%7C%20arm64-informational)
 ![docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
@@ -252,7 +252,7 @@ The **Settings → Runtime configuration** panel is read-only. It shows a restri
 
 ## Notifications
 
-Optional Compass Userbot and Telegram integrations can send incident messages. Configure these in the local `.env`:
+Three independent notification channels — **Telegram, Compass Userbot and Email (SMTP)** — use the persistent SQLite outbox and retry failed deliveries. Email sends responsive KVNRadar-branded HTML with a plain-text alternative. It distinguishes alerts, recoveries and blocklist changes. Configure these in the local `.env`:
 
 ```dotenv
 COMPASS_BASE_URL=
@@ -261,9 +261,22 @@ COMPASS_GROUP_ID=
 TELEGRAM_TOKEN=
 TELEGRAM_CHAT_ID=
 TELEGRAM_API_BASE_URL=https://api.telegram.org
+
+# Email: leave SMTP_HOST/FROM/TO blank to disable.
+SMTP_HOST=smtp.example.net
+SMTP_PORT=587
+SMTP_TLS_MODE=starttls
+SMTP_USERNAME=monitor@example.net
+SMTP_PASSWORD=REPLACE_WITH_PRIVATE_PASSWORD
+SMTP_FROM=monitor@example.net
+SMTP_TO=admin@example.net,ops@example.net
+SMTP_TIMEOUT=15
+SMTP_DASHBOARD_URL=https://radar.example.net:9443/#overview
 ```
 
-When configured, messages may contain hostnames, IP addresses and incident details. Sending to Telegram exposes those fields to the configured Telegram infrastructure. `TELEGRAM_API_BASE_URL` may be set to a trusted compatible HTTPS endpoint. Do not store actual notification credentials in GitHub. Restart `central` after modifying `.env`.
+When configured, messages may contain hostnames, IP addresses and incident details. Sending to Telegram, Compass or an SMTP provider shares those fields with the respective provider. Email uses verified TLS (`starttls` for port 587 or `ssl` for port 465); unencrypted SMTP is deliberately unsupported. `SMTP_USERNAME` and `SMTP_PASSWORD` are either both set or both empty. Use an app password when the server requires authentication. Recipients are comma-separated and never sent to the read-only Settings API. The optional `SMTP_DASHBOARD_URL` must be an HTTPS dashboard URL without credentials or query parameters.
+
+**Email preview:** open [`assets/email-alert-preview.html`](assets/email-alert-preview.html) locally to inspect the sample template. The email contains event details, a colored severity label and an optional dashboard link; the actual email is rendered dynamically from the notification event. Configure `.env` and rebuild/recreate `central` to activate SMTP. Existing Telegram and Compass integrations remain unchanged. `TELEGRAM_API_BASE_URL` may be set to a trusted compatible HTTPS endpoint. Do not store actual notification credentials in GitHub. Restart `central` after modifying `.env`.
 
 ## Configuration reference
 
@@ -276,6 +289,10 @@ When configured, messages may contain hostnames, IP addresses and incident detai
 | `deploy/nginx.conf` | Nginx TLS, Basic Auth and agent distribution endpoints |
 | `CENTRAL_BLOCKLIST_INTERVAL=300` | Regular central RIP/RDO matching interval, in seconds (minimum 60) |
 | `BLOCKLIST_UPDATE_SECONDS=21600` | Remote blocklist download interval, in seconds (minimum 900) |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_TLS_MODE` | SMTP host, port and TLS mode for the optional Email channel |
+| `SMTP_FROM`, `SMTP_TO` | Sender and comma-separated recipients, excluded from Settings API |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` | Optional SMTP authentication, stored only in `.env` |
+| `SMTP_DASHBOARD_URL` | Optional HTTPS link in alert email |
 | `BLOCKLIST_RESOLVE_DNS=0` | DNS resolving in the additional Blocklist Hits path; **does not** disable resolution by the main RIP/RDO scanner |
 
 **Important:** `BLOCKLIST_RESOLVE_DNS` applies only to the auxiliary `blocklist_hits` matching path. The main RIP check has its own DNS-resolution behavior. Source URLs are edited in **Blocklists**, not through `.env`.
