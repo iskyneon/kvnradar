@@ -1,0 +1,32 @@
+services:
+  central:
+    build:
+      context: .
+      dockerfile: central/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    read_only: true
+    tmpfs: [/tmp]
+    volumes:
+      - ./data:/data
+      - ./config:/app/config:ro
+    networks: [internal]
+    security_opt: [no-new-privileges:true]
+  nginx:
+    image: nginx:1.28-alpine
+    restart: unless-stopped
+    ports:
+      - "18080:18080/tcp"
+      - "9443:9443/tcp"
+      - "18081:18081/tcp"
+    depends_on: [central]
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+      - ./auth:/etc/nginx/auth:ro
+      - ./agent-dist:/srv/agent-dist:ro
+    networks: [internal]
+    security_opt: [no-new-privileges:true]
+networks:
+  internal:
+    driver: bridge

@@ -1,0 +1,8 @@
+{
+  "agent": "example-agent",
+  "token": "PASTE_TOKEN_FROM_CENTRAL_CONFIG_AGENTS_JSON",
+  "server": "https://radar.example.com:18080",
+  "ca_file": "",
+  "state_dir": "/var/lib/kvnradar-agent",
+  "sync_seconds": 300
+}

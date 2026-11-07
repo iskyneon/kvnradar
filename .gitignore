@@ -1,0 +1,41 @@
+# Local credentials and host-specific configuration
+.env
+.env.*
+!.env.example
+agent.json
+config/agents.json
+!config/agents.example.json
+config/targets.json
+!config/targets.example.json
+auth/
+certs/
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+
+# Mutable state and databases
+data/
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+*.log
+*.pid
+*.bak
+*.backup
+backups/
+*~
+
+# Generated binaries and caches
+dist/
+agent-dist/kvnradar-agent-linux-*
+agent-dist/SHA256SUMS
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+.idea/
+.vscode/
+.DS_Store

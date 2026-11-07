@@ -1,0 +1,51 @@
+/* KVNRadar native private Overview, integrated with existing admin shell */
+#page-overview.private-overview{color:var(--text,#f5f5f5)}
+#page-overview .private-overview-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-bottom:22px}
+#page-overview .private-overview-head h2{font-size:26px;font-weight:750;letter-spacing:-.035em;margin:0}
+#page-overview .private-overview-head .legend{display:flex;align-items:center;flex-wrap:wrap;gap:14px;font-size:12px;color:#9a9a9a}
+#page-overview .legend span{display:inline-flex;align-items:center;gap:6px}
+#page-overview .legend-dot{width:9px;height:9px;border-radius:3px;display:inline-block;background:#595959}
+#page-overview .legend-dot.up{background:#29bf72}
+#page-overview .legend-dot.degraded{background:#e4b43f}
+#page-overview .legend-dot.down{background:#ea6962}
+#page-overview .legend-dot.missing{background:#6b6b6b}
+#page-overview .legend-dot.excluded{background:#3978df}
+#page-overview .private-meta{display:flex;align-items:center;gap:8px;color:#aaa;font-size:12px;white-space:nowrap}
+#page-overview .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#777}
+#page-overview .dot.ok{background:#27c26d;box-shadow:0 0 0 4px #143c24}
+#page-overview .dot.error{background:#ff8179}
+#page-overview .services{display:flex;flex-direction:column;gap:14px}
+#page-overview .service{background:#0d0d0d;border:1px solid #292929;border-radius:20px;padding:22px 24px;color:#f2f2f2}
+#page-overview .service-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+#page-overview .service h3{font-size:20px;font-weight:700;letter-spacing:-.025em;line-height:1.2;margin:0}
+#page-overview .service p{font-size:13px;color:#aaa;margin:6px 0 0}
+#page-overview .service .status{background:transparent;border:0;padding:0;white-space:nowrap;gap:7px;display:inline-flex;align-items:center;font-weight:650;font-size:13px}
+#page-overview .service .status:before{content:'';display:block;width:8px;height:8px;border-radius:50%;background:#777}
+#page-overview .service .status.healthy{color:#38cc7d}
+#page-overview .service .status.healthy:before{background:#38cc7d}
+#page-overview .service .status.degraded{color:#efc457}
+#page-overview .service .status.degraded:before{background:#efc457}
+#page-overview .service .status.outage{color:#ff8179}
+#page-overview .service .status.outage:before{background:#ff8179}
+#page-overview .service .status.unknown{color:#aaa}
+#page-overview .check-matrix{display:flex;flex-wrap:wrap;align-items:center;gap:9px 12px;margin-top:18px}
+#page-overview .check-group{display:inline-flex;align-items:center;gap:6px;padding-right:12px;border-right:1px solid #333;white-space:nowrap}
+#page-overview .check-group:last-child{padding-right:0;border-right:0}
+#page-overview .check-group>strong{font-size:12px;letter-spacing:.035em;color:#b8b8b8}
+#page-overview .hosting-chip{display:inline-flex;align-items:center;gap:4px;background:#123521;color:#38d07c;padding:5px 7px;border-radius:7px;font-size:11px}
+#page-overview .hosting-chip b{font-size:12px}
+#page-overview .hosting-chip.degraded{background:#473519;color:#f0c456}
+#page-overview .hosting-chip.outage{background:#421d1c;color:#ff8179}
+#page-overview .hosting-chip.unknown{background:#292929;color:#999}
+#page-overview .hosting-chip.excluded{background:#142b49;color:#72adff}
+#page-overview .timeline{display:grid;grid-template-columns:repeat(48,minmax(0,1fr));gap:4px;margin-top:22px}
+#page-overview .tick{border-radius:3px;height:25px;background:#343434;min-width:0}
+#page-overview .tick.healthy{background:#29bf72}
+#page-overview .tick.degraded{background:#e4b43f}
+#page-overview .tick.outage{background:#ea6962}
+#page-overview .tick.unknown{background:#333}
+#page-overview .axis{display:flex;justify-content:space-between;font-size:12px;color:#939393;margin-top:8px}
+#page-overview .empty{padding:24px;text-align:center;color:#a4a4a4}
+@media(max-width:720px){#page-overview .private-overview-head h2{font-size:22px}#page-overview .service{padding:17px 14px}#page-overview .service h3{font-size:17px}#page-overview .check-group{flex-wrap:wrap;white-space:normal}#page-overview .timeline{gap:2px}#page-overview .tick{height:19px}}
+/* The old public publication flag is obsolete after disabling the public site. */
+.public-switch-line{display:none!important}

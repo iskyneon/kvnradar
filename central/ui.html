@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>KVNRadar</title>
+  <link rel="stylesheet" href="/ui/static/app.css">
+  <link rel="stylesheet" href="/ui/static/private-overview.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="masthead">
+      <div class="brand-wrap">
+        <div class="brand-badge"><span data-icon="pulse"></span></div>
+        <div class="brand-text">
+          <div class="brand-title">KVNRadar</div>
+          <div class="brand-sub">Infrastructure Monitor</div>
+        </div>
+      </div>
+      <nav class="topnav" id="nav" aria-label="Sections">
+        <button data-page="overview" class="nav-link active">Overview</button>
+        <button data-page="hosts" class="nav-link">Hosts</button>
+        <button data-page="agents" class="nav-link">Agents</button>
+        <button data-page="blocklists" class="nav-link">Blocklists</button>
+        <button data-page="history" class="nav-link">History</button>
+        <button data-page="settings" class="nav-link">Settings</button>
+      </nav>
+      <div class="head-actions">
+        <button class="ghost-btn" id="reload" aria-label="Refresh"><span data-icon="refresh-cw"></span></button>
+        <button class="ghost-btn" id="add-host" aria-label="Add resource"><span data-icon="plus"></span></button>
+      </div>
+    </header>
+
+    <div id="error" class="notice error hidden" role="alert"></div>
+
+    <main>
+      <section id="page-overview" class="page active private-overview">
+        <div class="private-overview-head">
+          <h2>Services</h2>
+          <div class="legend" aria-label="Legend"><span><i class="legend-dot up"></i>Operational</span><span><i class="legend-dot degraded"></i>Degraded</span><span><i class="legend-dot down"></i>Outage</span><span><i class="legend-dot missing"></i>No data</span><span><i class="legend-dot excluded"></i>Excluded</span></div>
+          <div class="private-meta"><span id="live-dot" class="dot"></span><span id="updated-at">Updating status…</span></div>
+        </div>
+        <div id="services" class="services" aria-live="polite"><div class="empty">Loading…</div></div>
+      </section>
+
+      <section id="page-hosts" class="page">
+        <div class="toolbar surface">
+          <label class="search-box"><span data-icon="search"></span><input id="host-search" placeholder="Search by name, host or IP"></label>
+          <select id="host-filter">
+            <option value="all">All statuses</option>
+            <option value="healthy">Healthy</option>
+            <option value="issue">Issues</option>
+            <option value="disabled">Disabled</option>
+          </select>
+          <span id="host-total" class="toolbar-meta"></span>
+        </div>
+        <div id="hosts-list" class="host-stack"></div>
+      </section>
+
+      <section id="page-agents" class="page">
+        <div id="agents-list" class="simple-grid"></div>
+      </section>
+
+      <section id="page-blocklists" class="page">
+        <div class="metrics-row" id="feed-stats"></div>
+        <div id="feed-sources" class="simple-grid"></div>
+        <section class="soft-card">
+          <div class="section-top"><h2>Host matches</h2></div>
+          <div id="feed-hits"></div>
+        </section>
+      </section>
+
+      <section id="page-history" class="page">
+        <div class="toolbar surface">
+          <select id="history-resource"><option value="">All resources</option></select>
+          <button class="pill-btn" id="history-refresh"><span data-icon="refresh-cw"></span>Refresh</button>
+          <span id="history-count" class="toolbar-meta">Up to 500 records</span>
+        </div>
+        <section class="soft-card">
+          <div id="history-list"></div>
+        </section>
+      </section>
+      <section id="page-settings" class="page">
+        <div class="settings-title"><h2 data-i18n-key="settings.title">Settings</h2><p data-i18n-key="settings.description">Language preferences and read-only runtime configuration.</p></div>
+        <div class="settings-grid">
+          <section class="soft-card settings-panel">
+            <h3 data-i18n-key="settings.language">Interface language</h3>
+            <p data-i18n-key="settings.languageHelp">English is the default. Your selection is stored in this browser.</p>
+            <label for="ui-language" data-i18n-key="settings.choose">Language</label>
+            <select id="ui-language"><option value="en">English</option><option value="ru">Русский</option></select>
+          </section>
+          <section class="soft-card settings-panel">
+            <h3 data-i18n-key="settings.runtime">Runtime configuration</h3>
+            <p data-i18n-key="settings.runtimeHelp">Current environment settings, read-only. Credentials, tokens, chat IDs and private values are never returned.</p>
+            <div id="settings-config" class="settings-config" aria-live="polite"><span class="empty">Loading…</span></div>
+          </section>
+        </div>
+      </section>
+    </main>
+    <footer class="app-footer" aria-label="KVNRadar version">KVNRadar <span>v0.6.1</span></footer>
+  </div>
+
+  <dialog id="host-dialog" class="modal">
+    <form id="host-form" method="dialog">
+      <div class="modal-head">
+        <div>
+          <div class="modal-eyebrow">RESOURCE CONFIGURATION</div>
+          <h2 id="form-title">New resource</h2>
+        </div>
+        <button type="button" class="ghost-btn" id="close-form"><span data-icon="x"></span></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <label>Identifier<input id="f-id" required maxlength="80" placeholder="chat-lg1" pattern="[A-Za-z0-9][A-Za-z0-9_.-]*"></label>
+          <label>Display name<input id="f-name" required maxlength="100" placeholder="Example Service"></label>
+          <label>Host / IP<input id="f-host" required maxlength="253" placeholder="service.example.com"></label>
+          <label>HTTP URL<input id="f-url" type="url" placeholder="https://service.example.com/"></label>
+        </div>
+        <label class="switch-line"><span>Resource enabled</span><input id="f-enabled" type="checkbox" checked></label>
+        <label class="switch-line"><span><strong>RIP exception (EXC)</strong><small style="display:block;color:#858b94;margin-top:4px">Skip central IP blocklists for this resource; RDO remains enabled</small></span><input id="f-rip-exempt" type="checkbox"></label>
+        <h3>Agents</h3>
+        <div id="f-agents" class="checkbox-grid"></div>
+        <h3>Checks</h3>
+        <div id="f-checks" class="checks-editor"></div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="pill-btn secondary" id="cancel-form">Cancel</button>
+        <button type="submit" class="pill-btn primary" id="submit-form">Save resource</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="detail-dialog" class="modal wide">
+    <div class="modal-head">
+      <div>
+        <div class="modal-eyebrow">RESOURCE INSIGHTS</div>
+        <h2 id="detail-title">Results</h2>
+      </div>
+      <button class="ghost-btn" id="close-detail"><span data-icon="x"></span></button>
+    </div>
+    <div class="modal-body" id="detail-body"></div>
+    <div class="modal-foot">
+      <button class="pill-btn secondary" id="detail-edit">Configure checks</button>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script defer src="/ui/static/i18n.js"></script>
+  <script defer src="/ui/static/app.js"></script>
+  <script defer src="/ui/static/private-overview.js"></script>
+  <script defer src="/ui/static/settings.js"></script>
+</body>
+</html>
