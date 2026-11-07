@@ -121,8 +121,6 @@ sudo journalctl -u kvnradar-agent -f
 
 For ARM64 use `dist/kvnradar-agent-linux-arm64`. The standard service is **`kvnradar-agent.service`**. The agent binary is `/usr/local/bin/kvnradar-agent`, its config is `/etc/kvnradar/agent.json`, and persistent state is `/var/lib/kvnradar-agent`.
 
-**Migrating from LG1 Watch:** both installers stop the legacy `lg1-watch-agent.service` if present, copy its pending measurements/state on first migration, then start `kvnradar-agent.service`. The previous config and state are not deleted. The manual installer uses the agent token and server from the supplied `agent.json`; the remote installer prompts for the existing token again. Both require systemd and root privileges. If migrating an active agent, verify its state and credentials before removing any legacy files.
-
 Alternatively, serve `agent-dist/` through port 18081, then on an agent:
 
 ```bash
