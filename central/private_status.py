@@ -1,5 +1,5 @@
-# LG1_HTTP_PORTS_V0413: add HTTP monitoring to aggregation and public matrix.
-# LG1_DISABLE_SSL_VPN_0411
+# KVNRADAR_HTTP_PORTS_V0413: add HTTP monitoring to aggregation and public matrix.
+# KVNRADAR_DISABLE_SSL_VPN_0411
 #!/usr/bin/env python3
 """KVNRadar private Overview status aggregation for the admin API."""
 import json
@@ -174,7 +174,7 @@ def collect(now=None, db_path=None):
         def hosting_code(name):
             return agent_short_names.get(name, agent_aliases.default_short(name))
         names=assigned if assigned else sorted(agent_seen)
-        # LG1_CENTRAL_RIP_RDO_PUBLIC_V0415: central-only badges, never duplicated per agent.
+        # KVNRADAR_CENTRAL_RIP_RDO_PUBLIC_V0415: central-only badges, never duplicated per agent.
         cr=central_rows.get(rid,{})
         def central_state(v, *, rip_exempt=False):
             # RIP exemption is a persistent resource setting, not a scan result.
@@ -196,7 +196,7 @@ def collect(now=None, db_path=None):
         result.append({'name':row['name'], 'description':'',
                        'status':current,
                        'checks':matrix,
-                       'timeline':[worst(bucket) for bucket in points[:-1]] + [current],  # LG1_CURRENT_TICK_V0412
+                       'timeline':[worst(bucket) for bucket in points[:-1]] + [current],  # KVNRADAR_CURRENT_TICK_V0412
                        'last_24h_samples':sum(map(len,points))})
     overall=aggregate_overall(result)
     return {'generated_at':now.isoformat(),'overall':overall,'services':result,'period':'24h'}

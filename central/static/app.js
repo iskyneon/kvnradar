@@ -1,4 +1,4 @@
-// LG1_DISABLE_SSL_VPN_0411
+// KVNRADAR_DISABLE_SSL_VPN_0411
 'use strict';
 const $=id=>document.getElementById(id);
 const ICONS={
@@ -75,7 +75,7 @@ function summarize(r){
   const fails=m.filter(x=>tone(x.status)==='fail').length;
   const avg=total?Math.round(m.reduce((n,x)=>n+Number(x.duration_ms||0),0)/total):0;
   // RIP/RDO BAN is a blocklist finding, not service availability. Keep it visible in Blocklists and the central badges only.
-  const t=r.enabled===false?'unknown':fails?'fail':warns?'warn':total?'ok':'unknown'; // LG1_V051_RIP_RDO_NOT_AVAILABILITY
+  const t=r.enabled===false?'unknown':fails?'fail':warns?'warn':total?'ok':'unknown'; // KVNRADAR_V051_RIP_RDO_NOT_AVAILABILITY
   return {m,hits,healthy,total,warns,fails,avg,t,availability:total?Math.round(healthy/total*10000)/100:0};
 }
 function spark(values){
@@ -102,7 +102,7 @@ function checkLine(resourceId, kind, checkRecords){
   return `<div class="line-item"><div class="line-left">${icon(labels[kind]?.[1]||'activity')}<span>${safe(label)}</span></div><div class="line-right"><span class="status-dot ${statusClass(t)}">${rightIcon}</span><button class="chevron-btn" data-action="toggle-check" data-id="${safe(resourceId)}" data-kind="${safe(kind)}">${icon('chevron')}</button></div></div>${open?`<div class="expanded-panel"><div class="agent-pills">${pills||'<span class="empty">Нет данных</span>'}</div></div>`:''}`;
 }
 function hostCard(r){
-  // LG1_CENTRAL_RIP_RDO_ADMIN_V0415: central checks are independent of agents.
+  // KVNRADAR_CENTRAL_RIP_RDO_ADMIN_V0415: central checks are independent of agents.
   const central=data.central_checks?.[r.id]||{};
   const centralFresh=central.checked_at && (Date.now()-new Date(central.checked_at).getTime())<900000;
   const overviewCentralBadge=(code,value)=>{
@@ -167,7 +167,7 @@ function renderAgents(){
   }).join('');
 }
 function renderBlocklists(){
-  const sources=data.blocklists?.sources||[]; const hits=[...(data.blocklists?.hits||[]),...(data.blocklists?.central_matches||[])]; // LG1_BLOCKLISTS_CENTRAL_MATCHES_V04151
+  const sources=data.blocklists?.sources||[]; const hits=[...(data.blocklists?.hits||[]),...(data.blocklists?.central_matches||[])]; // KVNRADAR_BLOCKLISTS_CENTRAL_MATCHES_V04151
   $('feed-stats').innerHTML = metricCard('Sources', sources.length, 'Configured', 'ok', 'globe') + metricCard('Healthy', sources.filter(s=>s.status==='ok').length, 'Last updates OK', 'ok', 'shield') + metricCard('Matches', hits.length, 'Including central RIP/RDO BAN', hits.length?'fail':'ok', 'alert');
   $('feed-sources').innerHTML = sources.map(s=>`<article class="feed-card"><div class="section-top"><div><h3>${safe(s.name)}</h3><p>${safe(s.url)}</p></div><span class="status ${s.status==='ok'?'ok':'fail'}">${safe(s.status)}</span></div><div class="feed-meta"><span>${number(s.records)} записей</span><span>${date(s.updated_at)}</span></div><div class="mini-bar"><i style="width:${s.status==='ok'?'100':'12'}%"></i></div>${s.error?`<div class="empty" style="color:#aa3a3a">${safe(s.error)}</div>`:''}</article>`).join('') || '<div class="soft-card empty">Нет источников</div>';
   $('feed-hits').innerHTML = table(['Ресурс','Тип','Источник','Совпадение','Последняя проверка'], hits.map(h=>[h.resource_name||h.resource_id,h.type||'RKN',h.source,h.match,date(h.checked_at)]));
@@ -190,7 +190,7 @@ async function apiGet(path){const r=await fetch(path,{cache:'no-store',credentia
 async function apiPost(path,body){const r=await fetch(path,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-KVNRadar-Admin':'1'},body:JSON.stringify(body)}); const d=await r.json(); if(!r.ok) throw Error(d.error||('HTTP '+r.status)); return d}
 async function refresh(){ if(fetching) return; fetching=true; try{ data=await apiGet('/ui/data'); const state=await apiGet('/ui/api/current'); data.current=state.current||[]; $('error').classList.add('hidden'); const select=$('history-resource'), prev=select.value; select.innerHTML='<option value="">Все ресурсы</option>' + (data.resources||[]).map(r=>`<option value="${safe(r.id)}">${safe(r.name||r.host||r.id)}</option>`).join(''); select.value=prev; hasLoaded=true; render(); if(current==='history') await loadHistory(); } catch(e){ $('error').textContent='Не удалось получить данные центрального сервера: '+e.message; $('error').classList.remove('hidden'); } finally { fetching=false; }}
 function toast(msg){$('toast').textContent=msg; $('toast').classList.add('visible'); setTimeout(()=>$('toast').classList.remove('visible'),3200)}
-// LG1_HTTP_PORTS_V0413: per-check ports, no mandatory resource URL.
+// KVNRADAR_HTTP_PORTS_V0413: per-check ports, no mandatory resource URL.
 function openForm(id){
   const r=(data.resources||[]).find(x=>x.id===id);
   $('form-title').textContent=r?'Редактирование ресурса':'Новый ресурс';

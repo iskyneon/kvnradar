@@ -62,14 +62,14 @@ def initdb():
           message TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
           next_attempt INTEGER NOT NULL DEFAULT 0, delivered_at TEXT);
         ''')
-        # LG1_PUBLIC_COLUMN_V048: opt-in publication; existing hosts stay private.
+        # KVNRADAR_PUBLIC_COLUMN_V048: opt-in publication; existing hosts stay private.
         if not any(col[1] == 'public' for col in c.execute('PRAGMA table_info(resources)')):
             c.execute('ALTER TABLE resources ADD COLUMN public INTEGER NOT NULL DEFAULT 0 CHECK(public IN (0,1))')
-        # LG1_RIP_EXEMPT_V053: explicit per-resource exception; default remains false.
+        # KVNRADAR_RIP_EXEMPT_V053: explicit per-resource exception; default remains false.
         if not any(col[1] == 'rip_exempt' for col in c.execute('PRAGMA table_info(resources)')):
             c.execute('ALTER TABLE resources ADD COLUMN rip_exempt INTEGER NOT NULL DEFAULT 0 CHECK(rip_exempt IN (0,1))')
         blocklists.schema(c)
-        # LG1_CENTRAL_RIP_RDO_V0415: always-on central-only checks; no agent assignment.
+        # KVNRADAR_CENTRAL_RIP_RDO_V0415: always-on central-only checks; no agent assignment.
         c.executescript("""
         CREATE TABLE IF NOT EXISTS central_resource_checks (
           resource_id TEXT PRIMARY KEY,
@@ -191,7 +191,7 @@ def scan_blocklists():
                     enqueue(c,f'KVNRadar | OFFLINE BLOCKLIST CHANGE\nTarget: {target["id"]}\nMatch: {matched or "none"}')
     except Exception as e: print('offline blocklist scan error',repr(e),flush=True)
 
-# LG1_CENTRAL_RIP_RDO_V0415
+# KVNRADAR_CENTRAL_RIP_RDO_V0415
 CENTRAL_BLOCKLIST_INTERVAL = max(60, int(os.getenv('CENTRAL_BLOCKLIST_INTERVAL','300')))
 
 def scan_rip_rdo_once():
@@ -328,8 +328,8 @@ def dispatch_forever():
 
 HTML = '''<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KVNRadar</title><style>body{background:#10141c;color:#e9edf4;font:15px system-ui;margin:0}main{max-width:1200px;margin:45px auto;padding:0 24px}h1{font-size:30px}.muted{color:#a1adbf}table{width:100%;border-collapse:collapse;background:#19212d;border-radius:12px;overflow:hidden}td,th{padding:13px;text-align:left;border-bottom:1px solid #303a48}th{color:#aebdd0}code{color:#b8daff}.ok{color:#6ed89b}.bad{color:#ff9d83}.card{display:inline-block;background:#19212d;padding:18px 26px;border-radius:10px;margin:0 10px 20px 0}a{color:#a9cfff}</style><main><h1>KVNRadar</h1><p class="muted">Локальная система мониторинга · обновление каждые 30 секунд</p><section id="cards"></section><h2>Последние результаты</h2><table><thead><tr><th>Время</th><th>Агент</th><th>Ресурс</th><th>Статус</th><th>Байты</th><th>Время</th></tr></thead><tbody id="results"></tbody></table><h2>Агенты</h2><table><thead><tr><th>Агент</th><th>Последняя связь</th></tr></thead><tbody id="agents"></tbody></table><script>function safe(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}async function refresh(){try{let d=await(await fetch('/ui/data',{cache:'no-store'})).json();document.getElementById('cards').innerHTML='<div class="card">Агентов: <b>'+d.agents.length+'</b></div><div class="card">Последних измерений: <b>'+d.recent.length+'</b></div><div class="card">Неотправленных уведомлений: <b>'+d.pending+'</b></div>';document.getElementById('results').innerHTML=d.recent.map(x=>'<tr><td>'+safe(x.ts)+'</td><td>'+safe(x.agent)+'</td><td>'+safe(x.target)+'</td><td class="'+(x.status.startsWith('OK_')?'ok':'bad')+'">'+safe(x.status)+'</td><td>'+safe(x.bytes)+'</td><td>'+safe(x.duration_ms)+' ms</td></tr>').join('');document.getElementById('agents').innerHTML=d.agents.map(x=>'<tr><td>'+safe(x.agent)+'</td><td>'+safe(x.last_seen)+'</td></tr>').join('')}catch(e){console.warn(e)}}refresh();setInterval(refresh,30000)</script></main></html>'''
 
-# LG1_DISABLE_SSL_VPN_0411: VPN probe retired; legacy rows retained as history.
-# LG1_HTTP_PORTS_V0413: independent HTTP and HTTPS checks; existing agents use http_status.
+# KVNRADAR_DISABLE_SSL_VPN_0411: VPN probe retired; legacy rows retained as history.
+# KVNRADAR_HTTP_PORTS_V0413: independent HTTP and HTTPS checks; existing agents use http_status.
 CHECK_TYPES = ('icmp','dns','tcp','tls','http_plain','http_status','http_content','traceroute')
 
 def list_resources():
@@ -401,7 +401,7 @@ def compiled_targets():
             out.append(x)
     return out
 
-# LG1_BLOCKLISTS_CENTRAL_MATCHES_V04151
+# KVNRADAR_BLOCKLISTS_CENTRAL_MATCHES_V04151
 def central_blocklist_matches():
     """Current RIP/RDO BANs, derived from the persisted central scan results."""
     out=[]

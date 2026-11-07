@@ -114,13 +114,13 @@ a{text-decoration:none;color:inherit}
 .editor-explain{display:block;margin-top:10px;color:#919792;font-size:12px;line-height:1.4}
 .editor-check-settings{grid-template-columns:repeat(auto-fit,minmax(135px,1fr))}
 
-/* LG1 v0.5.3 RIP EXC badge */
+/* KVNRadar v0.5.3 RIP EXC badge */
 .agent-pill.exc{background:#e7efff;color:#2865c7;border-color:#cbdcff}
 .agent-pill.exc .pill-dot{background:#3978df}
 .rip-exempt-line small{display:block;color:#8d918c;font-size:12px;margin-top:3px}
 
 
-/* LG1 v0.5.5 overview central badges */
+/* KVNRadar v0.5.5 overview central badges */
 .overview-central-badges{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
 .overview-central-pill{display:inline-flex;align-items:center;padding:7px 10px;border-radius:999px;background:#202020;color:#b8b8b8;border:1px solid #303030;font-size:12px;font-weight:700;line-height:1;white-space:nowrap}
 .overview-central-pill.ok{background:#10351f;color:#35d27b;border-color:#205b37}

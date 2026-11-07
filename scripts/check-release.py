@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Fail closed if a candidate GitHub source directory contains operational secrets."""
 from pathlib import Path
-import re,sys
+import re,sys,os
 root=Path(sys.argv[1] if len(sys.argv)>1 else Path(__file__).resolve().parents[1])
 forbidden_names={'.env','agent.json','privkey.pem','fullchain.pem','users','watch.sqlite3'}
 errors=[]
+# Optional comma-separated list of deployment-specific hostnames to prohibit.
+restricted_hosts=tuple(x.strip().lower() for x in os.environ.get("KVNRADAR_RELEASE_DENY_HOSTS", "").split(",") if x.strip())
 for p in root.rglob('*'):
     if not p.is_file(): continue
     rel=p.relative_to(root)
@@ -17,7 +19,7 @@ for p in root.rglob('*'):
     try: text=p.read_text()
     except (UnicodeError, OSError): continue
     if re.search(r'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----',text): errors.append(f'private key: {rel}')
-    if any(h in text for h in ('.'.join(('watch','lg1','co')),'.'.join(('t','lg1','org')),'.'.join(('chat','lg1','org')),'.'.join(('www','lg1','org')))): errors.append(f'private deployment URL: {rel}')
+    if any(host in text.lower() for host in restricted_hosts): errors.append(f'restricted deployment hostname: {rel}')
 if errors:
     print('RELEASE SECURITY CHECK FAILED:')
     for e in errors: print(' -',e)

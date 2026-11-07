@@ -64,27 +64,20 @@ fi
 install -d -m 0750 -o kvnradar -g kvnradar /var/lib/kvnradar-agent
 install -d -m 0750 -o root -g kvnradar /etc/kvnradar
 # Config is generated from environment; token never appears in process args or shell history.
-export LG1_AGENT_NAME="$AGENT_NAME" LG1_AGENT_TOKEN="$TOKEN" LG1_AGENT_SERVER="$SERVER_URL" LG1_SYNC_SECONDS="$SYNC_SECONDS"
+export KVNRADAR_AGENT_NAME="$AGENT_NAME" KVNRADAR_AGENT_TOKEN="$TOKEN" KVNRADAR_AGENT_SERVER="$SERVER_URL" KVNRADAR_SYNC_SECONDS="$SYNC_SECONDS"
 python3 - <<'PY' > "$TMP/agent.json"
 import json,os
-print(json.dumps({"agent":os.environ['LG1_AGENT_NAME'], "token":os.environ['LG1_AGENT_TOKEN'],
-                  "server":os.environ['LG1_AGENT_SERVER'], "ca_file":"",
-                  "state_dir":"/var/lib/kvnradar-agent", "sync_seconds":int(os.environ['LG1_SYNC_SECONDS'])},indent=2))
+print(json.dumps({"agent":os.environ['KVNRADAR_AGENT_NAME'], "token":os.environ['KVNRADAR_AGENT_TOKEN'],
+                  "server":os.environ['KVNRADAR_AGENT_SERVER'], "ca_file":"",
+                  "state_dir":"/var/lib/kvnradar-agent", "sync_seconds":int(os.environ['KVNRADAR_SYNC_SECONDS'])},indent=2))
 PY
-unset LG1_AGENT_TOKEN TOKEN
+unset KVNRADAR_AGENT_TOKEN TOKEN
 # Preserve previous KVNRadar configuration and binaries for local rollback.
 if [[ -f /etc/kvnradar/agent.json ]]; then
   cp -p /etc/kvnradar/agent.json /etc/kvnradar/agent.json.bak
 fi
 if [[ -f /usr/local/bin/kvnradar-agent ]]; then
   cp -p /usr/local/bin/kvnradar-agent /usr/local/bin/kvnradar-agent.bak
-fi
-# Stop the previous agent before taking a consistent copy of pending results.
-if systemctl list-unit-files lg1-watch-agent.service --no-legend 2>/dev/null | grep -q '^lg1-watch-agent.service'; then
-  systemctl stop lg1-watch-agent.service || true
-fi
-if [[ ! -e /var/lib/kvnradar-agent/state.json && -f /var/lib/lg1-watch-agent/state.json ]]; then
-  install -o kvnradar -g kvnradar -m 0600 /var/lib/lg1-watch-agent/state.json /var/lib/kvnradar-agent/state.json
 fi
 install -m 0755 "$TMP/$BIN" /usr/local/bin/kvnradar-agent
 install -o root -g kvnradar -m 0640 "$TMP/agent.json" /etc/kvnradar/agent.json
@@ -119,6 +112,5 @@ systemctl enable --now kvnradar-agent.service >/dev/null
 systemctl restart kvnradar-agent.service
 sleep 2
 systemctl is-active --quiet kvnradar-agent.service || { journalctl -u kvnradar-agent -n 20 --no-pager >&2; exit 1; }
-systemctl disable lg1-watch-agent.service >/dev/null 2>&1 || true
 echo 'KVNRadar agent installed, enabled at boot and running.'
 echo 'Inspect: journalctl -u kvnradar-agent -f'

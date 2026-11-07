@@ -1,6 +1,6 @@
 #!/bin/sh
 set -eu
-# KVNRadar agent (local binary + config). Installs systemd service and migrates legacy state.
+# KVNRadar agent (local binary + config). Installs the native systemd service.
 if [ "$(id -u)" -ne 0 ]; then echo 'Run as root' >&2; exit 1; fi
 if [ "$#" -ne 2 ]; then echo 'Usage: install-agent.sh /path/to/kvnradar-agent-linux-amd64 /path/to/agent.json' >&2; exit 2; fi
 BIN="$(realpath "$1")"
@@ -18,15 +18,7 @@ PYCONFIG
 id kvnradar >/dev/null 2>&1 || useradd --system --home-dir /var/lib/kvnradar-agent --shell /usr/sbin/nologin kvnradar
 install -d -m 0700 -o kvnradar -g kvnradar /var/lib/kvnradar-agent
 install -d -m 0750 -o root -g kvnradar /etc/kvnradar
-# Avoid two instances probing and writing state simultaneously.
-if systemctl list-unit-files lg1-watch-agent.service --no-legend 2>/dev/null | grep -q '^lg1-watch-agent.service'; then
-    systemctl stop lg1-watch-agent.service || true
-fi
-# Copy pending measurements and counters only on first migration.
-if [ ! -e /var/lib/kvnradar-agent/state.json ] && [ -f /var/lib/lg1-watch-agent/state.json ]; then
-    install -m 0600 -o kvnradar -g kvnradar /var/lib/lg1-watch-agent/state.json /var/lib/kvnradar-agent/state.json
-fi
-# Override old state_dir so that the new unit can write under /var/lib/kvnradar-agent.
+# Set an isolated writable state directory for the service.
 python3 - "$CONFIG" /etc/kvnradar/agent.json <<'PYCONFIG'
 import json,sys,os
 with open(sys.argv[1]) as f: d=json.load(f)
@@ -44,6 +36,4 @@ if ! systemctl is-active --quiet kvnradar-agent.service; then
     journalctl -u kvnradar-agent.service --no-pager -n 30 >&2
     exit 1
 fi
-# Only disable the old unit after the new one has started successfully.
-systemctl disable lg1-watch-agent.service >/dev/null 2>&1 || true
 printf 'KVNRadar agent running: systemctl status kvnradar-agent.service\n'
