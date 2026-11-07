@@ -1,6 +1,6 @@
 # KVNRadar
 
-![KVNRadar — Overview (English)](assets/KVNRadar-v0.5.9.1-overview-EN.png)
+![KVNRadar — Product Tour](assets/KVNRadar-v0.6.4-tour.gif)
 
 **Self-hosted distributed infrastructure for monitoring censorship blocks with independent network agents.**
 
