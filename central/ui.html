@@ -25,10 +25,7 @@
         <button data-page="history" class="nav-link">History</button>
         <button data-page="settings" class="nav-link">Settings</button>
       </nav>
-      <div class="head-actions">
-        <button class="ghost-btn" id="reload" aria-label="Refresh"><span data-icon="refresh-cw"></span></button>
-        <button class="ghost-btn" id="add-host" aria-label="Add resource"><span data-icon="plus"></span></button>
-      </div>
+
     </header>
 
     <div id="error" class="notice error hidden" role="alert"></div>
@@ -44,6 +41,7 @@
       </section>
 
       <section id="page-hosts" class="page">
+        <div class="toolbar surface host-page-heading"><div><strong id="hosts-heading">Hosts</strong><div class="toolbar-meta" id="hosts-description">Manage monitored hosts. Pause monitoring without losing configuration or history.</div></div><button type="button" class="pill-btn primary" id="add-host">+ Add host</button></div>
         <div class="toolbar surface">
           <label class="search-box"><span data-icon="search"></span><input id="host-search" placeholder="Search by name, host or IP"></label>
           <select id="host-filter">
@@ -98,7 +96,7 @@
         </div>
       </section>
     </main>
-    <footer class="app-footer" aria-label="KVNRadar version">KVNRadar <span>v0.6.2</span></footer>
+    <footer class="app-footer" aria-label="KVNRadar version">KVNRadar <span>v0.6.3</span></footer>
   </div>
 
   <dialog id="blocklist-dialog" class="modal">

@@ -468,7 +468,7 @@ def readonly_environment():
         except (ValueError, TypeError):
             value = 'not set'
         result.append({'key':key,'value':value,'source':'environment' if raw else 'default'})
-    return {'version':'0.6.2','entries':result,
+    return {'version':'0.6.3','entries':result,
             'notifications':{'compass':bool(os.getenv('COMPASS_BASE_URL') and os.getenv('COMPASS_BOT_TOKEN') and os.getenv('COMPASS_GROUP_ID')),
                              'telegram':bool(os.getenv('TELEGRAM_TOKEN') and os.getenv('TELEGRAM_CHAT_ID'))}}
 
@@ -512,7 +512,7 @@ class Handler(BaseHTTPRequestHandler):
     def admin_post(self):
         if self.headers.get('X-KVNRadar-Admin') != '1': return self.reply(403,{'error':'admin header required'})
         try:
-            if self.path not in ('/ui/api/resources/save','/ui/api/resources/delete','/ui/api/agents/short-name','/ui/api/blocklists/source/save','/ui/api/blocklists/source/delete','/ui/api/blocklists/source/update'):
+            if self.path not in ('/ui/api/resources/save','/ui/api/resources/delete','/ui/api/resources/toggle','/ui/api/agents/short-name','/ui/api/blocklists/source/save','/ui/api/blocklists/source/delete','/ui/api/blocklists/source/update'):
                 return self.reply(404,{'error':'not found'})
             length=int(self.headers.get('Content-Length','0'))
             if length <= 0 or length > 65536: return self.reply(413,{'error':'body too large'})
@@ -539,6 +539,18 @@ class Handler(BaseHTTPRequestHandler):
                     short = agent_aliases.set_alias(c, obj.get('agent'), obj.get('short_name'))
                 return self.reply(200, {'ok': True, 'short_name': short})
             rid=str(obj.get('id',''))
+            if self.path == '/ui/api/resources/toggle':
+                # Change only enabled state. Keep existing checks, assigned agents,
+                # RIP exception, notification settings and historical measurements.
+                if type(obj.get('enabled')) is not bool:
+                    return self.reply(400, {'error':'enabled must be boolean'})
+                with LOCK,connect() as c:
+                    cur=c.execute('UPDATE resources SET enabled=?,updated_at=? WHERE id=?',
+                                  (int(obj['enabled']),now(),rid))
+                    if cur.rowcount != 1:
+                        return self.reply(404,{'error':'Resource not found'})
+                RIP_WAKE.set()
+                return self.reply(200,{'ok':True,'id':rid,'enabled':obj['enabled']})
             if self.path.endswith('/delete'):
                 with LOCK,connect() as c: c.execute('DELETE FROM resources WHERE id=?',(rid,))
                 return self.reply(200,{'ok':True})

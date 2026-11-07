@@ -22,7 +22,7 @@ button{cursor:pointer}
 a{text-decoration:none;color:inherit}
 .hidden{display:none!important}
 .shell{max-width:1180px;margin:0 auto;padding:28px 32px 44px}
-.masthead{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:28px;margin-bottom:28px}
+.masthead{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:28px;margin-bottom:28px}
 .brand-wrap{display:flex;align-items:center;gap:14px}
 .brand-badge{width:52px;height:52px;border-radius:14px;background:#def1e2;display:grid;place-items:center;color:var(--green)}
 .brand-badge .icon{width:26px;height:26px;stroke-width:2.1}
@@ -156,3 +156,12 @@ a{text-decoration:none;color:inherit}
 .feed-controls .bl-delete{background:#fff1f1;color:#ac3434;border:1px solid #f0cccc}
 #blocklist-dialog .modal-body label{font-size:14px}
 #blocklist-dialog .modal-body .form-grid label{display:flex;flex-direction:column;gap:8px}
+
+/* KVNRadar v0.6.3: host-level controls */
+.host-page-heading{padding:22px 24px;gap:18px;flex-wrap:wrap}
+.host-page-heading strong{font-size:20px;color:#181c19}
+.host-page-heading .toolbar-meta{margin-top:4px}
+.host-page-heading #add-host{margin-left:auto;white-space:nowrap;font-weight:700;padding:13px 20px}
+.expanded-actions .host-pause{background:#3d3016;color:#ffd58a;border:1px solid #8b6b23}
+.expanded-actions .host-resume{background:#126d35;color:#fff;border:1px solid #268f4d}
+@media (max-width:720px){.host-page-heading #add-host{margin-left:0;width:100%;justify-content:center}}
