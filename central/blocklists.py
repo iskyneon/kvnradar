@@ -19,8 +19,8 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 DEFAULT_SOURCES = (
-    ('antifilter-cidr', 'cidr', 'https://antifilter.download/list/allyouneed.lst'),
-    ('antifilter-domains', 'domain', 'https://antifilter.download/list/domains.lst'),
+    ('antifilter-cidr', 'cidr', 'https://raw.githubusercontent.com/iskyneon/antifilter-mirror/main/allyouneed.lst'),
+    ('antifilter-domains', 'domain', 'https://raw.githubusercontent.com/iskyneon/antifilter-mirror/main/domains.lst'),
 )
 MAX_DOWNLOAD = 256 * 1024 * 1024
 INTERVAL = max(900, int(os.getenv('BLOCKLIST_UPDATE_SECONDS', '21600')))
