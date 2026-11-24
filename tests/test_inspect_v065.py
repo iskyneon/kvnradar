@@ -9,6 +9,7 @@ from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'central'))
 import blocklists
+import central_probes
 import kvn_inspect as inspect_jobs
 import server
 
@@ -32,13 +33,16 @@ class InspectTests(unittest.TestCase):
         blocklists._index_changed()
 
     def test_central_only_rip_and_rdo(self):
-        job=inspect_jobs.create(server.connect,{'host':'203.0.113.21','port':443,'use_agent':False},{'edge':'token'})
-        self.assertEqual(job['state'],'complete')
-        self.assertEqual(job['rip']['status'],'BAN')
-        self.assertEqual(job['rdo']['status'],'UNKNOWN')
-        with patch.object(blocklists.socket,'getaddrinfo',return_value=[]):
-            job=inspect_jobs.create(server.connect,{'host':'blocked.example','port':8443,'use_agent':False},{})
-        self.assertEqual(job['rdo']['status'],'BAN')
+        # Probe execution is asynchronous: suppress external network access here.
+        with patch.object(central_probes.POOL,'submit',return_value=None):
+            job=inspect_jobs.create(server.connect,{'host':'203.0.113.21','port':443,'use_agent':False},{'edge':'token'})
+            self.assertEqual(job['state'],'running')
+            self.assertEqual(job['checks'],list(central_probes.KINDS))
+            self.assertEqual(job['rip']['status'],'BAN')
+            self.assertEqual(job['rdo']['status'],'UNKNOWN')
+            with patch.object(blocklists.socket,'getaddrinfo',return_value=[]):
+                job=inspect_jobs.create(server.connect,{'host':'blocked.example','port':8443,'use_agent':False},{})
+            self.assertEqual(job['rdo']['status'],'BAN')
 
     def test_one_shot_agent_dispatch_and_event_isolation(self):
         job=inspect_jobs.create(server.connect,{'host':'203.0.113.22','port':8443,'use_agent':True,'agent':'edge','checks':['tcp','tls','https','dpi']},{'edge':'token'})
