@@ -12,6 +12,7 @@ import uuid
 from datetime import datetime, timezone
 
 import blocklists
+import central_probes
 
 KINDS = {'tcp', 'tls', 'https', 'dpi'}
 TTL_SEC = 1800
@@ -97,7 +98,7 @@ def create(dbconnect, obj, configured_agents):
         checks = _validate_checks(obj.get('checks'))
     else:
         agent = None
-        checks = []
+        checks = list(central_probes.KINDS)
     rip, rdo = check_central(dbconnect, host)
     run_id = uuid.uuid4().hex
     with dbconnect() as c:
@@ -106,12 +107,28 @@ def create(dbconnect, obj, configured_agents):
             queued = c.execute("SELECT COUNT(*) FROM inspect_jobs WHERE agent=? AND state IN ('queued','dispatched') AND expires_at>?", (agent,int(time.time()))).fetchone()[0]
             if queued >= 3:
                 raise ValueError('This agent already has three pending inspection jobs')
+        if not use_agent:
+            busy=c.execute("SELECT COUNT(*) FROM inspect_jobs WHERE agent IS NULL AND state='running'").fetchone()[0]
+            if busy >= 10:
+                raise ValueError('Too many Central inspections are running')
         c.execute('''INSERT INTO inspect_jobs
             (id,host,port,agent,checks,requested_at,expires_at,state,rip,rdo)
             VALUES(?,?,?,?,?,?,?,?,?,?)''',
             (run_id,host,port,agent,json.dumps(checks),utc(),int(time.time())+TTL_SEC,
-             'queued' if use_agent else 'complete',json.dumps(rip),json.dumps(rdo)))
+             'queued' if use_agent else 'running',json.dumps(rip),json.dumps(rdo)))
         c.execute("DELETE FROM inspect_jobs WHERE expires_at < ?",(int(time.time())-7*86400,))
+    if not use_agent:
+        def record(kind, result):
+            with dbconnect() as conn:
+                row=conn.execute('SELECT results,state FROM inspect_jobs WHERE id=?',(run_id,)).fetchone()
+                if row is None or row['state'] not in ('running','queued'):
+                    return
+                results=json.loads(row['results'])
+                results[kind]=result
+                state='complete' if len(results)==len(checks) else 'running'
+                conn.execute('UPDATE inspect_jobs SET results=?,state=? WHERE id=?',
+                             (json.dumps(results),state,run_id))
+        central_probes.POOL.submit(central_probes.run_all,host,port,record)
     return read_job(dbconnect, run_id)
 
 
