@@ -54,6 +54,9 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM revoked_agents WHERE agent='demo'").fetchone()[0],1)
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM agent_seen WHERE agent='demo'").fetchone()[0],0)
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM measurements').fetchone()[0],1)
+        self.assertNotIn('demo',server.active_agent_credentials())
+        with self.assertRaisesRegex(ValueError,'Select a configured agent'):
+            kvn_inspect.create(server.connect,{'host':'example.org','use_agent':True,'agent':'demo','checks':['tcp']},server.active_agent_credentials())
 
     def test_manual_blocklist_scan_is_queued(self):
         previous=server.CENTRAL_SCAN_STATE['requested']
