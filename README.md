@@ -437,3 +437,7 @@ kvnradar/
 - Partial HTTP transfers, DNS failures or RIP/RDO matches are indicators requiring further investigation, not definitive identification of a blocking mechanism.
 - A fresh installation requires credentials, a valid HTTPS certificate and manual configuration of monitored hosts and agent IDs.
 - Scheduled VACUUM does not impose a measurement-retention limit. **Clear History** deletes stored inspection jobs as well as other history; protect the administrative UI and keep restorable backups.
+
+## License
+
+Apache-2.0
