@@ -8,6 +8,7 @@
  enToRu['Infrastructure Monitor']='Мониторинг инфраструктуры';
  const sourceNodes=new WeakMap(), sourceAttrs=new WeakMap();
  const KEYS={
+  'nav.inspect':['Inspect','Проверка'],
   'settings.title':['Settings','Настройки'],
   'settings.description':['Language preferences and read-only runtime configuration.','Язык интерфейса и параметры окружения только для чтения.'],
   'settings.language':['Interface language','Язык интерфейса'],
