@@ -188,7 +188,7 @@ function renderAgents(){
 function blText(en,ru){return window.KVNI18N?.lang()==='ru'?ru:en;}
 function renderBlocklists(){
   const sources=data.blocklists?.sources||[];
-  const hits=[...(data.blocklists?.hits||[]),...(data.blocklists?.central_matches||[])];
+  const hits=data.blocklists?.central_matches||[]; // Canonical RIP/RDO only; legacy hits can duplicate scans.
   $('blocklists-heading').textContent=blText('Blocklist sources','Источники блокировок');
   $('blocklists-description').textContent=blText('Manage downloaded RIP/RDO feeds. Changes are saved in SQLite.','Управление списками RIP/RDO. Настройки сохраняются в SQLite.');
   $('add-blocklist-source').textContent=blText('+ Add source','+ Добавить источник');
@@ -202,7 +202,7 @@ function renderBlocklists(){
     ${s.error?`<div class="empty" style="color:#aa3a3a">${safe(s.error)}</div>`:''}
     <div class="feed-controls"><button class="pill-btn light" data-action="bl-edit" data-id="${safe(s.name)}">${blText('Edit','Изменить')}</button><button class="pill-btn light" data-action="bl-toggle" data-id="${safe(s.name)}">${s.enabled?blText('Disable','Отключить'):blText('Enable','Включить')}</button><button class="pill-btn light" data-action="bl-update" data-id="${safe(s.name)}" ${s.enabled?'':'disabled'}>${blText('Update now','Обновить')}</button><button class="pill-btn light bl-delete" data-action="bl-delete" data-id="${safe(s.name)}">${blText('Delete','Удалить')}</button></div></article>`;
   }).join('')||'<div class="soft-card empty">'+blText('No sources','Источников нет')+'</div>';
-  $('feed-hits').innerHTML=table([blText('Resource','Ресурс'),blText('Type','Тип'),blText('Source','Источник'),blText('Match','Совпадение'),blText('Last check','Последняя проверка')],hits.map(h=>[h.resource_name||h.resource_id,h.type||'RKN',h.source,h.match,date(h.checked_at)]));
+  $('feed-hits').innerHTML=table([blText('Resource','Ресурс'),blText('Type','Тип'),blText('Source','Источник'),blText('Match','Совпадение'),blText('Last check','Последняя проверка')],hits.map(h=>[h.resource_name||h.resource_id,h.type,h.source,h.match,date(h.checked_at)]));
 }
 function openBlocklistSource(name=''){
   const s=(data.blocklists?.sources||[]).find(x=>x.name===name);

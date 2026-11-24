@@ -137,11 +137,14 @@ a{text-decoration:none;color:inherit}
 
 /* KVNRadar Settings, native admin page */
 .settings-title{margin:0 0 18px}.settings-title h2{font-size:25px;margin:0 0 6px}.settings-title p,.settings-panel p{color:#797f79;font-size:14px;line-height:1.55}
-.settings-grid{display:grid;grid-template-columns:minmax(260px,.75fr) minmax(360px,1.25fr);gap:18px;align-items:start}
+.settings-grid{display:grid;grid-template-columns:minmax(280px,.75fr) minmax(0,1.25fr);gap:18px;align-items:start}
+.settings-grid>.settings-panel{min-width:0}
+.settings-grid>.settings-maintenance{grid-column:1;grid-row:2}
+.settings-grid>.settings-runtime{grid-column:2;grid-row:1 / span 2}
 .settings-panel h3{margin:0 0 8px}.settings-panel label{display:block;font-size:13px;margin:18px 0 8px;color:#616861}.settings-panel select{min-width:180px}
 .settings-config{margin-top:16px}.setting-row{display:flex;gap:20px;align-items:center;justify-content:space-between;padding:12px 2px;border-bottom:1px solid #edf0ed;font-size:13px}
 .setting-row code{font-size:12px;overflow-wrap:anywhere;color:#454a45}.setting-value{font-weight:600;text-align:right;overflow-wrap:anywhere;max-width:58%}.setting-source{display:block;color:#949b94;font-size:11px;font-weight:400;margin-top:3px}
-@media(max-width:800px){.settings-grid{grid-template-columns:1fr}}
+@media(max-width:800px){.settings-grid{grid-template-columns:minmax(0,1fr)}.settings-grid>.settings-maintenance,.settings-grid>.settings-runtime{grid-column:1;grid-row:auto}}
 
 /* KVNRadar v0.6.1: editable two-character agent labels */
 .agent-short-editor{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;margin-top:16px}
@@ -166,7 +169,7 @@ a{text-decoration:none;color:inherit}
 .expanded-actions .host-resume{background:#126d35;color:#fff;border:1px solid #268f4d}
 @media (max-width:720px){.host-page-heading #add-host{margin-left:0;width:100%;justify-content:center}}
 
-/* KVNRadar v0.6.8: paginated History and semantic status colors */
+/* KVNRadar v0.6.9: paginated History and semantic status colors */
 .history-table-wrap,.notification-failures-table{overflow-x:auto}
 .history-pagination{display:flex;flex-direction:column;align-items:center;gap:10px;padding:18px 8px 5px}
 .history-pagination:empty{display:none}
@@ -189,3 +192,9 @@ a{text-decoration:none;color:inherit}
 .notification-failure-row td{background:#fff0ef!important;color:#962d2a!important;border-bottom-color:#f5d2cf!important}
 .notification-failure-row .channel{color:#b82d25!important}
 @media(max-width:760px){.history-pagination{padding:12px 0}.history-page-btn{min-width:29px;height:30px;padding:0 7px}.history-table{min-width:680px}}
+
+/* Destructive action is intentionally prominent, never a normal pill. */
+.settings-maintenance .pill-btn.danger{background:#be252b;color:white;border:1px solid #a91e24;margin-top:16px;font-weight:650}
+.settings-maintenance .pill-btn.danger:hover{background:#971e23}
+.settings-maintenance .pill-btn.danger:disabled{opacity:.55;cursor:wait}
+#maintenance-message{min-height:1.4em;overflow-wrap:anywhere}

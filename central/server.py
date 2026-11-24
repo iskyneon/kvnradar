@@ -36,6 +36,85 @@ def connect():
     con.execute('PRAGMA busy_timeout=15000')
     return con
 
+# Keeping this separate from SQLite auto_vacuum: VACUUM rebuilds the database and
+# can reclaim pages after explicitly deleted history. It does NOT trim live data.
+VACUUM_INTERVAL = max(0, int(os.getenv('SQLITE_VACUUM_INTERVAL_SECONDS', '86400')))
+VACUUM_WAKE = threading.Event()
+VACUUM_GUARD = threading.Lock()
+VACUUM_STATE = {'running': False, 'error': ''}
+HISTORY_TABLES = ('measurements', 'central_resource_check_history', 'inspect_jobs', 'notification_failures')
+
+def maintenance_status():
+    with connect() as c:
+        last = c.execute("SELECT value FROM settings WHERE key='sqlite_last_vacuum_at'").fetchone()
+        counts = {table: c.execute('SELECT COUNT(*) FROM ' + table).fetchone()[0] for table in HISTORY_TABLES}
+        # SQLite PRAGMA reports allocated pages even with WAL enabled.
+        page_count = c.execute('PRAGMA page_count').fetchone()[0]
+        page_size = c.execute('PRAGMA page_size').fetchone()[0]
+        free_pages = c.execute('PRAGMA freelist_count').fetchone()[0]
+    return {'interval_seconds': VACUUM_INTERVAL, 'last_vacuum_at': last[0] if last else None,
+            'db_bytes': page_count * page_size, 'free_bytes': free_pages * page_size,
+            'history_counts': counts, 'vacuum_running': VACUUM_STATE['running'],
+            'vacuum_error': VACUUM_STATE['error']}
+
+def clear_history():
+    # Preserve resource definitions, current RIP/RDO checks, agent state,
+    # incidents, blocklist feeds, notification outbox and all settings.
+    with LOCK, connect() as c:
+        counts = {}
+        for table in HISTORY_TABLES:
+            counts[table] = c.execute('SELECT COUNT(*) FROM ' + table).fetchone()[0]
+            c.execute('DELETE FROM ' + table)
+        c.execute("DELETE FROM sqlite_sequence WHERE name IN ('central_resource_check_history','notification_failures')")
+    VACUUM_WAKE.set()  # Reclaim freed pages asynchronously; API returns promptly.
+    return counts
+
+def vacuum_worker():
+    # First scheduled run is after one interval, not immediately on deployment.
+    # Persist the last completion so a container restart does not reset cadence.
+    while True:
+        interval = VACUUM_INTERVAL
+        if interval == 0:
+            VACUUM_WAKE.wait()
+        else:
+            with connect() as c:
+                row = c.execute("SELECT value FROM settings WHERE key='sqlite_last_vacuum_epoch'").fetchone()
+            if not row:
+                with connect() as c:
+                    c.execute("INSERT OR IGNORE INTO settings(key,value) VALUES('sqlite_last_vacuum_epoch',?)", (str(time.time()),))
+                last = time.time()
+            else:
+                last = float(row[0])
+            VACUUM_WAKE.wait(max(1, interval - (time.time() - last)))
+        VACUUM_WAKE.clear()
+        if not VACUUM_GUARD.acquire(blocking=False):
+            continue
+        VACUUM_STATE['running'] = True
+        with connect() as c:
+            c.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('sqlite_last_vacuum_epoch',?)", (str(time.time()),))
+        VACUUM_STATE['error'] = ''
+        try:
+            # VACUUM requires a connection outside a transaction. Do not take
+            # LOCK: WAL allows UI readers to continue while maintenance runs.
+            c = sqlite3.connect(DB, timeout=60, isolation_level=None)
+            try:
+                c.execute('PRAGMA busy_timeout=60000')
+                c.execute('VACUUM')
+            finally:
+                c.close()
+            with LOCK, connect() as c:
+                c.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('sqlite_last_vacuum_at',?)", (now(),))
+                c.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('sqlite_last_vacuum_epoch',?)", (str(time.time()),))
+            print('SQLite VACUUM completed', flush=True)
+        except (sqlite3.Error, OSError) as exc:
+            VACUUM_STATE['error'] = str(exc)[:160]
+            print('SQLite VACUUM failed:', repr(exc), flush=True)
+            # Avoid tight retry loops if scheduled maintenance cannot run.
+            time.sleep(60)
+        finally:
+            VACUUM_STATE['running'] = False
+            VACUUM_GUARD.release()
+
 def initdb():
     Path(DB).parent.mkdir(parents=True, exist_ok=True)
     with connect() as c:
@@ -48,6 +127,7 @@ def initdb():
           expected_bytes INTEGER, details TEXT NOT NULL,
           received_at TEXT NOT NULL, PRIMARY KEY(agent,event_id));
         CREATE INDEX IF NOT EXISTS measurements_by_target ON measurements(target, received_at DESC);
+        CREATE INDEX IF NOT EXISTS measurements_recent ON measurements(received_at DESC);
         CREATE TABLE IF NOT EXISTS agent_seen (agent TEXT PRIMARY KEY, last_seen TEXT, remote_addr TEXT);
         CREATE TABLE IF NOT EXISTS agent_short_names (agent TEXT PRIMARY KEY, short_name TEXT NOT NULL UNIQUE CHECK(length(short_name)=2));
         CREATE TABLE IF NOT EXISTS resources (
@@ -467,6 +547,7 @@ def readonly_environment():
         ('BLOCKLIST_UPDATE_SECONDS', '21600', 'seconds'),
         ('BLOCKLIST_RESOLVE_DNS', '0', 'boolean'),
         ('PORT', '8080', 'port'),
+        ('SQLITE_VACUUM_INTERVAL_SECONDS', '86400', 'seconds'),
     ]
     result = []
     for key, default, kind in specs:
@@ -508,7 +589,8 @@ def readonly_environment():
     for key,value in (('SMTP_HOST',smtp_host),('SMTP_PORT',smtp_port),
                       ('SMTP_TLS_MODE',smtp_mode),('SMTP_FROM',smtp_from)):
         result.append({'key':key,'value':value,'source':'environment' if key in os.environ else 'default'})
-    return {'version':'0.6.8','entries':result,
+    return {'version':'0.6.9','entries':result,
+            'maintenance':maintenance_status(),
             'notifications':{'compass':bool(os.getenv('COMPASS_BASE_URL') and os.getenv('COMPASS_BOT_TOKEN') and os.getenv('COMPASS_GROUP_ID')),
                              'telegram':bool(os.getenv('TELEGRAM_TOKEN') and os.getenv('TELEGRAM_CHAT_ID')),
                              'email':email_notifications.enabled()}}
@@ -556,11 +638,15 @@ class Handler(BaseHTTPRequestHandler):
     def admin_post(self):
         if self.headers.get('X-KVNRadar-Admin') != '1': return self.reply(403,{'error':'admin header required'})
         try:
-            if self.path not in ('/ui/api/resources/save','/ui/api/resources/delete','/ui/api/resources/toggle','/ui/api/agents/short-name','/ui/api/blocklists/source/save','/ui/api/blocklists/source/delete','/ui/api/blocklists/source/update','/ui/api/inspect'):
+            if self.path not in ('/ui/api/resources/save','/ui/api/resources/delete','/ui/api/resources/toggle','/ui/api/agents/short-name','/ui/api/blocklists/source/save','/ui/api/blocklists/source/delete','/ui/api/blocklists/source/update','/ui/api/inspect','/ui/api/history/clear'):
                 return self.reply(404,{'error':'not found'})
             length=int(self.headers.get('Content-Length','0'))
             if length <= 0 or length > 65536: return self.reply(413,{'error':'body too large'})
             obj=json.loads(self.rfile.read(length))
+            if self.path == '/ui/api/history/clear':
+                if obj.get('confirm') != 'CLEAR_HISTORY':
+                    return self.reply(400, {'error':'Explicit confirmation required'})
+                return self.reply(200, {'ok':True,'deleted':clear_history()})
             if self.path == '/ui/api/inspect':
                 result=inspect_jobs.create(connect,obj,readjson(AGENTS))
                 return self.reply(200,{'job':result})
@@ -709,6 +795,7 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__=='__main__':
     initdb()
+    threading.Thread(target=vacuum_worker,daemon=True,name='sqlite-vacuum').start()
     threading.Thread(target=dispatch_forever,daemon=True).start()
     threading.Thread(target=blocklists.worker,args=(connect,LOCK,RIP_WAKE.set),daemon=True).start()
     threading.Thread(target=central_rip_rdo_worker,daemon=True).start()

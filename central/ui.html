@@ -124,7 +124,14 @@
             <label for="ui-language" data-i18n-key="settings.choose">Language</label>
             <select id="ui-language"><option value="en">English</option><option value="ru">Русский</option></select>
           </section>
-          <section class="soft-card settings-panel">
+          <section class="soft-card settings-panel settings-maintenance">
+            <h3 id="maintenance-title">Database maintenance</h3>
+            <p id="maintenance-help">Daily VACUUM is configurable through .env. Clearing history cannot be undone.</p>
+            <div id="maintenance-status" class="settings-config" aria-live="polite">Loading…</div>
+            <button type="button" id="settings-clear-history" class="pill-btn danger">Clear History</button>
+            <p id="maintenance-message" role="status" aria-live="polite"></p>
+          </section>
+          <section class="soft-card settings-panel settings-runtime">
             <h3 data-i18n-key="settings.runtime">Runtime configuration</h3>
             <p data-i18n-key="settings.runtimeHelp">Current environment settings, read-only. Credentials, tokens, chat IDs and private values are never returned.</p>
             <div id="settings-config" class="settings-config" aria-live="polite"><span class="empty">Loading…</span></div>
@@ -132,7 +139,7 @@
         </div>
       </section>
     </main>
-    <footer class="app-footer" aria-label="KVNRadar version">KVNRadar <span>v0.6.8</span></footer>
+    <footer class="app-footer" aria-label="KVNRadar version">KVNRadar <span>v0.6.9</span></footer>
   </div>
 
   <dialog id="blocklist-dialog" class="modal">
