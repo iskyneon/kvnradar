@@ -211,7 +211,7 @@ Agent jobs expire after **30 minutes**. An agent can have at most **three** pend
 | Blocklists | [Source health](assets/screenshots/07-blocklists.png) · [Add source](assets/screenshots/08-add-source.png) · [Edit source](assets/screenshots/09-edit-source.png) |
 | Inspect | [Form](assets/screenshots/10-inspect.png) · [Agent checks](assets/screenshots/11-inspect-agent-options.png) · [Queued](assets/screenshots/12-inspect-queued.png) · [Dispatched](assets/screenshots/13-inspect-sent.png) · [Results](assets/screenshots/14-inspect-results.png) |
 | History | [Recorded measurements](assets/screenshots/15-history.png) |
-| Settings | [Earlier settings screenshot: language and runtime configuration](assets/screenshots/16-settings.png) · [Russian UI](assets/screenshots/17-russian.png) · v0.6.9 also includes database maintenance controls (not pictured) |
+| Settings | [Earlier settings screenshot: language and runtime configuration](assets/screenshots/16-settings.png) · [Russian UI](assets/screenshots/17-russian.png) |
 
 ## Checks and status model
 
