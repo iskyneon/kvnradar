@@ -360,6 +360,7 @@ def scan_rip_rdo_once():
             c.execute('DELETE FROM central_resource_checks WHERE resource_id NOT IN (SELECT id FROM resources WHERE enabled=1)')
     except Exception as exc:
         print('central RIP/RDO scan error:',type(exc).__name__,str(exc)[:200],flush=True)
+        raise
 
 RIP_WAKE = threading.Event()
 
