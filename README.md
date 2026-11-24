@@ -47,12 +47,13 @@ KVNRadar monitors reachability, DNS resolution, TCP connectivity, TLS, HTTP(S), 
 | **Distributed checks** | ICMP, DNS, TCP, TLS, HTTP/HTTPS, content-transfer diagnostics and traceroute from independent agents |
 | **Monitoring lifecycle** | Add/edit hosts; pause or resume monitoring without deleting configuration or measurement history |
 | **Overview** | Per-service state, RIP/RDO badges, agent-level check results, 24-hour timeline and **Details** dialog |
-| **Blocklists** | Independently maintained RIP (IP/CIDR) and RDO (domain) feeds; add, edit, disable, update and delete sources in the dashboard |
+| **Blocklists** | Independently maintained RIP (IP/CIDR) and RDO (domain) feeds; manage sources and view current centrally detected matches by resource display name, without duplicated legacy hits |
 | **RIP exclusions** | Per-resource `rip_exempt` produces blue `EXC` while retaining independent RDO checks |
 | **Agents** | Two-character display labels generated automatically or overridden in **Agents** without changing agent IDs/tokens |
 | **Inspect** | On-demand central RIP/RDO lookup for any hostname/IP; optional one-time TCP, TLS, HTTPS and DPI / Content probes via a selected agent |
-| **Interface** | English by default, Russian selectable; read-only non-sensitive runtime Settings |
-| **Notifications** | Optional Telegram Bot API and self-hosted Compass Userbot; persistent notification outbox |
+| **Interface** | English by default, Russian selectable; read-only runtime configuration and database maintenance status in Settings |
+| **Database maintenance** | Scheduled SQLite `VACUUM` (24-hour default), database statistics and an explicitly confirmed **Clear History** action |
+| **Notifications** | Optional Telegram Bot API, self-hosted Compass Userbot and SMTP email; persistent notification outbox |
 | **Deployment** | Docker Compose central + Nginx TLS/Basic Auth; Go agents managed by systemd |
 | **Privacy** | Local result storage and blocklist matching; monitored hostnames are not sent to blocklist-feed providers |
 
@@ -163,9 +164,9 @@ The admin UI is a single native application with seven sections:
 | **Hosts** | Use **Add host** to create a resource. Search/filter hosts, edit checks and assigned agents, set the RIP exception, or **Pause monitoring / Resume monitoring**. Delete a host when no longer needed. |
 | **Agents** | Inspect agent activity and assign custom two-character **Short names** or revert to **Auto**. |
 | **Inspect** | Check any hostname or IP instantly against cached central RIP/RDO lists; optionally queue one-time TCP, TLS, HTTPS and DPI / Content checks for one selected agent, then view the correlated results. |
-| **Blocklists** | Manage downloaded IP/CIDR and domain sources, see source health, update time, record counts and current matches. |
+| **Blocklists** | Manage downloaded IP/CIDR and domain sources, see source health, update time, record counts and current centrally detected RIP/RDO matches. |
 | **History** | Filter and inspect recorded measurements by resource. |
-| **Settings** | Switch English/Russian and inspect an allowlisted, read-only runtime configuration summary. |
+| **Settings** | Switch English/Russian, inspect read-only runtime configuration and SQLite maintenance status, and explicitly clear stored history. |
 
 **Pause vs delete:** Pausing sets `resources.enabled=false` and stops scheduling checks for that resource, including central RIP/RDO scans. The resource, check configuration, RIP exception setting and existing measurement history remain in SQLite. Resume enables monitoring again. The Overview intentionally shows active resources; paused resources remain manageable under Hosts → Disabled.
 
@@ -182,6 +183,8 @@ Blocklist source settings are stored in **SQLite**, not in `.env` or a hardcoded
 The initial Antifilter domain/CIDR sources are inserted on first migration, and then treated as editable sources. A deleted source is not recreated at each restart. The central scanner combines all enabled cached feeds of each type. A failed refresh retains the previously downloaded valid data; the source displays an error. Source changes trigger central checking without waiting for the next regular scan.
 
 **Fetch restrictions:** only HTTPS feeds on port 443, with validation of public destination IPs. The downloader rejects local/private destinations, URL credentials and redirects; environment HTTP proxies are not used. The response size is capped at 256 MiB. Source URLs must therefore be publicly reachable HTTPS endpoints; an internal-only feed is not supported by this downloader.
+
+The **Host matches** table uses the central RIP/RDO scan results (`central_matches`) rather than combining those results with the legacy `blocklist_hits` records. It shows resource **Display Name**, `RIP` or `RDO`, source, matched entry and last check; the Matches counter uses this same set of displayed records. An absent match does not prove that a resource is reachable from a given agent location.
 
 **Data privacy:** KVNRadar downloads feed files and performs membership checks locally. It does **not** send monitored resource names or IPs as feed lookup requests. A host's normal DNS queries may still leave the configured resolver.
 
@@ -208,7 +211,7 @@ Agent jobs expire after **30 minutes**. An agent can have at most **three** pend
 | Blocklists | [Source health](assets/screenshots/07-blocklists.png) · [Add source](assets/screenshots/08-add-source.png) · [Edit source](assets/screenshots/09-edit-source.png) |
 | Inspect | [Form](assets/screenshots/10-inspect.png) · [Agent checks](assets/screenshots/11-inspect-agent-options.png) · [Queued](assets/screenshots/12-inspect-queued.png) · [Dispatched](assets/screenshots/13-inspect-sent.png) · [Results](assets/screenshots/14-inspect-results.png) |
 | History | [Recorded measurements](assets/screenshots/15-history.png) |
-| Settings | [Read-only configuration and language](assets/screenshots/16-settings.png) · [Russian UI](assets/screenshots/17-russian.png) |
+| Settings | [Earlier settings screenshot: language and runtime configuration](assets/screenshots/16-settings.png) · [Russian UI](assets/screenshots/17-russian.png) · v0.6.9 also includes database maintenance controls (not pictured) |
 
 ## Checks and status model
 
@@ -272,6 +275,8 @@ English is the default dashboard language. The language selector under **Setting
 
 The **Settings → Runtime configuration** panel is read-only. It shows a restricted set of non-secret values and whether supported notification integrations are configured. It does not expose `.env` contents, agent tokens, authentication passwords, API keys, group/chat identifiers or private URL paths/query parameters.
 
+The **Database maintenance** panel shows the configured VACUUM interval, last successful run, allocated SQLite database size, unused database pages, total stored history rows and current VACUUM state/error. The interval is configured in the central service environment, **not** through the UI. The red **Clear History** button asks for confirmation before permanently deleting measurement records, central RIP/RDO check history, Inspect jobs and notification-delivery failures. It keeps resources, blocklist sources, current central checks, settings and the notification outbox. Clearing the history requests a subsequent VACUUM to reclaim freed pages; it does not guarantee that the database file shrinks immediately. This action cannot be undone without a backup.
+
 ## Notifications
 
 Three independent notification channels — **Telegram, Compass Userbot and Email (SMTP)** — use the persistent SQLite outbox and retry failed deliveries. Email sends responsive KVNRadar-branded HTML with a plain-text alternative. It distinguishes alerts, recoveries and blocklist changes. Configure these in the local `.env`:
@@ -310,15 +315,20 @@ The SQLite `outbox` dispatcher checks for due messages approximately **every 10 
 
 ## Data retention and backups
 
-SQLite is stored in the persistent Compose-mounted `./data` directory. The current application does not apply a general age-based pruning policy to regular measurements or delivered `outbox` entries. Monitor its size and free disk space.
+SQLite is stored in the persistent Compose-mounted `./data` directory. The application does not apply a general age-based pruning policy to regular measurements or delivered `outbox` entries. Monitor its size and free disk space.
+
+By default the central service schedules a SQLite `VACUUM` every **86,400 seconds (24 hours)**. Set `SQLITE_VACUUM_INTERVAL_SECONDS=0` in the local `.env` to disable scheduled runs. The setting is read on service startup, so recreate the central container after changing `.env`. VACUUM rebuilds the database and may reclaim space from *previously deleted* records; **it does not delete live history or enforce a retention period**. Reserve additional free disk space before large VACUUM operations. The Settings page reports the last successful run and any recorded error.
+
+**Clear History** is a separate, destructive administrative operation in Settings. It removes the stored history categories identified below (including pending Inspect jobs), but not configured hosts, current central RIP/RDO results, feed definitions or the notification outbox. It also triggers a VACUUM attempt. On large databases the deletion may take time and affect requests; take a consistent backup before using it.
 
 | Category | Current behavior |
 |---|---|
-| Regular `measurements` | No automatic age-based pruning |
-| Central RIP/RDO check history | Pruned after **90 days** |
-| Failed notification deliveries | Latest **5,000** retained in SQLite; latest **250** displayed |
+| Regular `measurements` | No automatic age-based pruning; removed by **Clear History** |
+| Central RIP/RDO check history | Pruned after **90 days** during central checks; **Clear History** removes remaining history |
+| Failed notification deliveries | Latest **5,000** retained in SQLite; latest **250** displayed; **Clear History** removes these rows |
 | UI measurement history | At most **250** selected records, **15 per page**; a display/query limit, not database retention |
-| `outbox` (delivered and pending) | No general age-based deletion in the dispatcher |
+| Inspect jobs | Automatically expire; **Clear History** deletes stored jobs, including pending ones |
+| `outbox` (delivered and pending) | No general age-based deletion in the dispatcher; preserved by **Clear History** |
 | Agent pending queue | Persisted locally; at most **100 submitted per sync**, not a local-storage cap |
 
 Back up SQLite with its **online backup API**, or stop the Central container before copying database files; an arbitrary live-file copy may be inconsistent. Preserve `.env`, `config/agents.json`, `auth/users`, and any active TLS certificate/private key required for restoration. Backups contain credentials and operational details: restrict access, never commit them to GitHub, and test restoration on an isolated instance.
@@ -346,7 +356,9 @@ sudo journalctl -u kvnradar-agent -n 100 --no-pager
 - **TLS handshake or verification errors:** verify the hostname, certificate chain and trusted issuer on the agent. Use `ca_file` for a private CA where appropriate; do not permanently disable TLS verification.
 - **Missing alerts:** first check whether a status transition is eligible; `SHORT_RESPONSE` is intentionally non-alerting and a disconnected agent does not generate a separate timed alert. Then check private `.env` channel configuration, the History failure panel and Central logs.
 - **Blocklist errors:** fetch URLs must be publicly reachable HTTPS endpoints on TCP 443. Private targets and redirects are rejected; failed downloads retain previous valid cached data.
-- **Incomplete History:** a paused check, offline agent or stale sample is different from a 250-record UI history limit. The underlying measurements may still be in SQLite.
+- **Incomplete History:** a paused check, offline agent or stale sample is different from a 250-record UI history limit. The underlying measurements may still be in SQLite. **Clear History** permanently deletes the stored history categories described above.
+- **Large database / slow Settings:** VACUUM reclaims unused pages but does not prune active measurements. Inspect the maintenance statistics, allow free space for SQLite rebuilding, and back up before clearing history. The current maintenance status request counts rows in history tables, which can be expensive on large databases.
+- **VACUUM errors:** inspect **Settings → Database maintenance** and `docker compose logs --tail=100 central` for `SQLite VACUUM failed`. Check disk space and concurrent database activity.
 
 Central implements `/health`, but the standard Nginx **agent-sync port** exposes only `/api/sync`; do not assume `/health` is publicly available on port 18080.
 
@@ -366,8 +378,9 @@ Central implements `/health`, but the standard Nginx **agent-sync port** exposes
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | Optional SMTP authentication, stored only in `.env` |
 | `SMTP_DASHBOARD_URL` | Optional HTTPS link in alert email |
 | `BLOCKLIST_RESOLVE_DNS=0` | DNS resolving in the additional Blocklist Hits path; **does not** disable resolution by the main RIP/RDO scanner |
+| `SQLITE_VACUUM_INTERVAL_SECONDS=86400` | Seconds between scheduled SQLite VACUUM operations (24-hour default; `0` disables scheduling). Does not delete history |
 
-**Important:** `BLOCKLIST_RESOLVE_DNS` applies only to the auxiliary `blocklist_hits` matching path. The main RIP check has its own DNS-resolution behavior. Source URLs are edited in **Blocklists**, not through `.env`.
+**Important:** `BLOCKLIST_RESOLVE_DNS` applies only to the auxiliary `blocklist_hits` matching path. The main RIP check has its own DNS-resolution behavior. Source URLs are edited in **Blocklists**, not through `.env`. In v0.6.9 the Blocklists **Host matches** table displays the central RIP/RDO results rather than the auxiliary hits.
 
 ## Security
 
@@ -416,6 +429,4 @@ kvnradar/
 - Agent results represent the specific networks where agents run, not the availability from every ISP or country.
 - Partial HTTP transfers, DNS failures or RIP/RDO matches are indicators requiring further investigation, not definitive identification of a blocking mechanism.
 - A fresh installation requires credentials, a valid HTTPS certificate and manual configuration of monitored hosts and agent IDs.
-
-
-
+- Scheduled VACUUM does not impose a measurement-retention limit. **Clear History** deletes stored inspection jobs as well as other history; protect the administrative UI and keep restorable backups.
