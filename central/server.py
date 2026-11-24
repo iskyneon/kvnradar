@@ -26,10 +26,17 @@ CONFIG = os.getenv('WATCH_CONFIG', '/app/config/targets.json')
 AGENTS = os.getenv('AGENTS_FILE', '/app/config/agents.json')
 LOCK = threading.RLock()
 MAX_BODY = 1024 * 1024
+CENTRAL_SCAN_STATE={'requested':0,'fulfilled':0,'completed':0.0,'running':False,'error':''}
+CENTRAL_SCAN_GUARD=threading.Lock()
 
 def now(): return datetime.now(timezone.utc).isoformat(timespec='seconds')
 def readjson(path):
     with open(path, encoding='utf-8') as f: return json.load(f)
+def active_agent_credentials():
+    configured=readjson(AGENTS)
+    with connect() as c:
+        revoked={row['agent'] for row in c.execute('SELECT agent FROM revoked_agents')}
+    return {name:token for name,token in configured.items() if name not in revoked}
 def connect():
     con = sqlite3.connect(DB, timeout=15)
     con.row_factory = sqlite3.Row
@@ -129,6 +136,7 @@ def initdb():
         CREATE INDEX IF NOT EXISTS measurements_by_target ON measurements(target, received_at DESC);
         CREATE INDEX IF NOT EXISTS measurements_recent ON measurements(received_at DESC);
         CREATE TABLE IF NOT EXISTS agent_seen (agent TEXT PRIMARY KEY, last_seen TEXT, remote_addr TEXT);
+        CREATE TABLE IF NOT EXISTS revoked_agents (agent TEXT PRIMARY KEY, revoked_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS agent_short_names (agent TEXT PRIMARY KEY, short_name TEXT NOT NULL UNIQUE CHECK(length(short_name)=2));
         CREATE TABLE IF NOT EXISTS resources (
           id TEXT PRIMARY KEY, name TEXT NOT NULL, host TEXT NOT NULL,
@@ -357,12 +365,26 @@ def scan_rip_rdo_once():
             c.execute('DELETE FROM central_resource_checks WHERE resource_id NOT IN (SELECT id FROM resources WHERE enabled=1)')
     except Exception as exc:
         print('central RIP/RDO scan error:',type(exc).__name__,str(exc)[:200],flush=True)
+        raise
 
 RIP_WAKE = threading.Event()
 
 def central_rip_rdo_worker():
     while True:
-        scan_rip_rdo_once()
+        CENTRAL_SCAN_STATE['running']=True
+        with CENTRAL_SCAN_GUARD:
+            requested_at_start=CENTRAL_SCAN_STATE['requested']
+        try:
+            scan_rip_rdo_once()
+            CENTRAL_SCAN_STATE['error']=''
+        except Exception as exc:
+            CENTRAL_SCAN_STATE['error']=str(exc)[:160]
+            print('central scan error', repr(exc), flush=True)
+        finally:
+            with CENTRAL_SCAN_GUARD:
+                CENTRAL_SCAN_STATE['fulfilled']=max(CENTRAL_SCAN_STATE['fulfilled'],requested_at_start)
+                CENTRAL_SCAN_STATE['completed']=time.time()
+                CENTRAL_SCAN_STATE['running']=False
         RIP_WAKE.wait(CENTRAL_BLOCKLIST_INTERVAL)
         RIP_WAKE.clear()
 
@@ -589,7 +611,7 @@ def readonly_environment():
     for key,value in (('SMTP_HOST',smtp_host),('SMTP_PORT',smtp_port),
                       ('SMTP_TLS_MODE',smtp_mode),('SMTP_FROM',smtp_from)):
         result.append({'key':key,'value':value,'source':'environment' if key in os.environ else 'default'})
-    return {'version':'0.6.9','entries':result,
+    return {'version':'0.7.0','entries':result,
             'maintenance':maintenance_status(),
             'notifications':{'compass':bool(os.getenv('COMPASS_BASE_URL') and os.getenv('COMPASS_BOT_TOKEN') and os.getenv('COMPASS_GROUP_ID')),
                              'telegram':bool(os.getenv('TELEGRAM_TOKEN') and os.getenv('TELEGRAM_CHAT_ID')),
@@ -623,6 +645,8 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(events,list) or len(events)>100: return self.reply(400,{'error':'invalid event count'})
             accepted=[]
             with LOCK,connect() as c:
+                if c.execute('SELECT 1 FROM revoked_agents WHERE agent=?',(agent,)).fetchone():
+                    return self.reply(403,{'error':'agent revoked'})
                 c.execute('INSERT INTO agent_seen(agent,last_seen,remote_addr) VALUES(?,?,?) ON CONFLICT(agent) DO UPDATE SET last_seen=excluded.last_seen,remote_addr=excluded.remote_addr',(agent,now(),self.headers.get('X-Real-IP',self.client_address[0])[:80]))
                 for e in events:
                     if process(c,agent,e): accepted.append(str(e['id']))
@@ -638,7 +662,7 @@ class Handler(BaseHTTPRequestHandler):
     def admin_post(self):
         if self.headers.get('X-KVNRadar-Admin') != '1': return self.reply(403,{'error':'admin header required'})
         try:
-            if self.path not in ('/ui/api/resources/save','/ui/api/resources/delete','/ui/api/resources/toggle','/ui/api/agents/short-name','/ui/api/blocklists/source/save','/ui/api/blocklists/source/delete','/ui/api/blocklists/source/update','/ui/api/inspect','/ui/api/history/clear'):
+            if self.path not in ('/ui/api/resources/save','/ui/api/resources/delete','/ui/api/resources/toggle','/ui/api/agents/short-name','/ui/api/blocklists/source/save','/ui/api/blocklists/source/delete','/ui/api/blocklists/source/update','/ui/api/inspect','/ui/api/history/clear','/ui/api/agents/delete','/ui/api/blocklists/check-now'):
                 return self.reply(404,{'error':'not found'})
             length=int(self.headers.get('Content-Length','0'))
             if length <= 0 or length > 65536: return self.reply(413,{'error':'body too large'})
@@ -647,8 +671,25 @@ class Handler(BaseHTTPRequestHandler):
                 if obj.get('confirm') != 'CLEAR_HISTORY':
                     return self.reply(400, {'error':'Explicit confirmation required'})
                 return self.reply(200, {'ok':True,'deleted':clear_history()})
+            if self.path == '/ui/api/agents/delete':
+                agent=obj.get('agent')
+                if obj.get('confirm')!='DELETE_AGENT' or not isinstance(agent,str) or not agent or len(agent)>128:
+                    return self.reply(400,{'error':'Invalid removal request'})
+                with LOCK,connect() as c:
+                    if not c.execute('SELECT 1 FROM agent_seen WHERE agent=?',(agent,)).fetchone():
+                        return self.reply(404,{'error':'Unknown agent'})
+                    c.execute('INSERT OR REPLACE INTO revoked_agents(agent,revoked_at) VALUES(?,?)',(agent,now()))
+                    c.execute('DELETE FROM agent_short_names WHERE agent=?',(agent,))
+                    c.execute('DELETE FROM agent_seen WHERE agent=?',(agent,))
+                    c.execute("UPDATE inspect_jobs SET state='expired' WHERE agent=? AND state IN ('queued','dispatched')",(agent,))
+                return self.reply(200,{'ok':True,'agent':agent})
+            if self.path == '/ui/api/blocklists/check-now':
+                with CENTRAL_SCAN_GUARD:
+                    CENTRAL_SCAN_STATE['requested']+=1
+                RIP_WAKE.set()
+                return self.reply(202,{'ok':True,'queued':True})
             if self.path == '/ui/api/inspect':
-                result=inspect_jobs.create(connect,obj,readjson(AGENTS))
+                result=inspect_jobs.create(connect,obj,active_agent_credentials())
                 return self.reply(200,{'job':result})
             if self.path.startswith('/ui/api/blocklists/source/'):
                 action=self.path.rsplit('/',1)[-1]
@@ -724,7 +765,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if self.path.startswith('/ui/api/inspect'):
             if self.path == '/ui/api/inspect':
-                return self.reply(200,{'jobs':inspect_jobs.recent_jobs(connect),'agents':sorted(readjson(AGENTS))})
+                return self.reply(200,{'jobs':inspect_jobs.recent_jobs(connect),'agents':sorted(active_agent_credentials())})
             q=parse_qs(urlparse(self.path).query)
             if urlparse(self.path).path != '/ui/api/inspect': return self.reply(404,{'error':'not found'})
             job=inspect_jobs.read_job(connect,q.get('id',[''])[0])
@@ -748,6 +789,10 @@ class Handler(BaseHTTPRequestHandler):
         if self.path=='/ui/api/blocklists':
             snap=blocklists.snapshot(connect)
             snap['central_matches']=central_blocklist_matches()
+            snap['central_scan']={'running':CENTRAL_SCAN_STATE['running'],
+                                  'pending':CENTRAL_SCAN_STATE['requested']>CENTRAL_SCAN_STATE['fulfilled'],
+                                  'last_completed_at':CENTRAL_SCAN_STATE['completed'],
+                                  'error':CENTRAL_SCAN_STATE['error']}
             return self.reply(200,snap)
         if self.path.startswith('/ui/api/results'):
             q=parse_qs(urlparse(self.path).query)
@@ -790,7 +835,7 @@ class Handler(BaseHTTPRequestHandler):
                 blocks=[dict(x) for x in c.execute("SELECT target,matched,checked_at FROM rkn_matches WHERE matched <> '' ORDER BY target")]
             with LOCK,connect() as c:
                 central_checks={x['resource_id']:dict(x) for x in c.execute('SELECT * FROM central_resource_checks')}
-            return self.reply(200,{'recent':recent,'agents':agents,'agent_short_names':agent_aliases_map,'pending':pending,'blocklist_matches':blocks,'resources':list_resources(), 'blocklists':{**blocklists.snapshot(connect),'central_matches':central_blocklist_matches()}, 'central_checks':central_checks})
+            return self.reply(200,{'recent':recent,'agents':agents,'agent_short_names':agent_aliases_map,'pending':pending,'blocklist_matches':blocks,'resources':list_resources(), 'blocklists':{**blocklists.snapshot(connect),'central_matches':central_blocklist_matches(), 'central_scan':{'running':CENTRAL_SCAN_STATE['running'],'pending':CENTRAL_SCAN_STATE['requested']>CENTRAL_SCAN_STATE['fulfilled'],'last_completed_at':CENTRAL_SCAN_STATE['completed'],'error':CENTRAL_SCAN_STATE['error']}}, 'central_checks':central_checks})
         return self.reply(404,{'error':'not found'})
 
 if __name__=='__main__':

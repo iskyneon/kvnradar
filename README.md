@@ -6,7 +6,7 @@
 
 KVNRadar monitors reachability, DNS resolution, TCP connectivity, TLS, HTTP(S), content-transfer anomalies and network routes from multiple independent Linux locations. A central Python service coordinates lightweight Go agents, stores results in SQLite and provides an authenticated web dashboard. Agents pull tasks from central; no VPN or inbound agent listener is required.
 
-![version](https://img.shields.io/badge/version-0.6.9-blue)
+![version](https://img.shields.io/badge/version-0.7.0-blue)
 ![platform](https://img.shields.io/badge/platform-Linux-informational)
 ![architecture](https://img.shields.io/badge/agent-amd64%20%7C%20arm64-informational)
 ![docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
@@ -46,11 +46,11 @@ KVNRadar monitors reachability, DNS resolution, TCP connectivity, TLS, HTTP(S), 
 |---|---|
 | **Distributed checks** | ICMP, DNS, TCP, TLS, HTTP/HTTPS, content-transfer diagnostics and traceroute from independent agents |
 | **Monitoring lifecycle** | Add/edit hosts; pause or resume monitoring without deleting configuration or measurement history |
-| **Overview** | Per-service state, RIP/RDO badges, agent-level check results, 24-hour timeline and **Details** dialog |
-| **Blocklists** | Independently maintained RIP (IP/CIDR) and RDO (domain) feeds; manage sources and view current centrally detected matches by resource display name, without duplicated legacy hits |
+| **Overview** | Per-service state, interactive status/EXC filters, server-name search, RIP/RDO badges, agent checks, 24-hour timeline and **Details** dialog |
+| **Blocklists** | Independently maintained RIP (IP/CIDR) and RDO (domain) feeds; manage sources, trigger immediate rechecks and view current matches by resource display name |
 | **RIP exclusions** | Per-resource `rip_exempt` produces blue `EXC` while retaining independent RDO checks |
-| **Agents** | Two-character display labels generated automatically or overridden in **Agents** without changing agent IDs/tokens |
-| **Inspect** | On-demand central RIP/RDO lookup for any hostname/IP; optional one-time TCP, TLS, HTTPS and DPI / Content probes via a selected agent |
+| **Agents** | Two-character display labels, manual alias reset and agent removal with persistent Central-side access revocation |
+| **Inspect** | On-demand central RIP/RDO lookup and one-time TCP, TLS, HTTPS and DPI / Content probes directly from Central or through a selected agent |
 | **Interface** | English by default, Russian selectable; read-only runtime configuration and database maintenance status in Settings |
 | **Database maintenance** | Scheduled SQLite `VACUUM` (24-hour default), database statistics and an explicitly confirmed **Clear History** action |
 | **Notifications** | Optional Telegram Bot API, self-hosted Compass Userbot and SMTP email; persistent notification outbox |
@@ -160,11 +160,11 @@ The admin UI is a single native application with seven sections:
 
 | Section | What you can do |
 |---|---|
-| **Overview** | View active service health, per-agent check results, RIP/RDO/EXC badges and a 24-hour timeline. Click **Details** on a service card to open its existing insights dialog: history, checks and latency information. |
+| **Overview** | View active service health, per-agent check results, RIP/RDO/EXC badges and a 24-hour timeline. The status legend doubles as a filter (Operational, Degraded, Outage, No data, Excluded); click a selected status again to clear it. Search servers by name or description without altering monitoring. Use **Details** for history, checks and latency information. |
 | **Hosts** | Use **Add host** to create a resource. Search/filter hosts, edit checks and assigned agents, set the RIP exception, or **Pause monitoring / Resume monitoring**. Delete a host when no longer needed. |
-| **Agents** | Inspect agent activity and assign custom two-character **Short names** or revert to **Auto**. |
-| **Inspect** | Check any hostname or IP instantly against cached central RIP/RDO lists; optionally queue one-time TCP, TLS, HTTPS and DPI / Content checks for one selected agent, then view the correlated results. |
-| **Blocklists** | Manage downloaded IP/CIDR and domain sources, see source health, update time, record counts and current centrally detected RIP/RDO matches. |
+| **Agents** | Inspect agent activity, manage two-character **Short names**, restore **Auto**, or **Delete** an agent and revoke its Central access. |
+| **Inspect** | Look up any hostname or IP against cached RIP/RDO lists. Without the agent option, Central runs TCP, TLS, HTTPS and DPI / Content checks immediately; with it, the selected agent receives a one-time queued task. |
+| **Blocklists** | Manage downloaded IP/CIDR and domain sources, see current RIP/RDO matches and use **Check now** to rescan all enabled hosts against cached feeds. |
 | **History** | Filter and inspect recorded measurements by resource. |
 | **Settings** | Switch English/Russian, inspect read-only runtime configuration and SQLite maintenance status, and explicitly clear stored history. |
 
@@ -178,6 +178,7 @@ Blocklist source settings are stored in **SQLite**, not in `.env` or a hardcoded
 - **Edit** — change the source definition and enabled state.
 - **Enable / Disable** — exclude a feed temporarily without deleting its configuration.
 - **Update now** — request an immediate feed refresh.
+- **Check now**, beside **Host matches** — recheck every enabled monitored host against the currently cached RIP/RDO feeds without downloading new lists. The UI displays progress and updates the matches when scanning finishes.
 - **Delete** — remove a feed from the active configuration.
 
 The initial Antifilter domain/CIDR sources are inserted on first migration, and then treated as editable sources. A deleted source is not recreated at each restart. The central scanner combines all enabled cached feeds of each type. A failed refresh retains the previously downloaded valid data; the source displays an error. Source changes trigger central checking without waiting for the next regular scan.
@@ -194,9 +195,10 @@ The **Host matches** table uses the central RIP/RDO scan results (`central_match
 
 1. Open **Inspect**, enter a hostname/IP and the target port (`443` by default), then select **Inspect host**.
 2. The central server immediately checks the host against **locally cached, enabled RIP (IP/CIDR) and RDO (domain) feeds**. Results include `OK`, `BAN` or `UNKNOWN`, matched sources/CIDRs/domains and resolved IP addresses when available. Inspect does **not** refresh external feeds for each request.
-3. Optionally enable **Run one-time probes from a selected agent**, choose a configured agent and one or more of **TCP**, **TLS**, **HTTPS** and **DPI / Content**. The chosen port is used for these probes. HTTPS and DPI use HTTPS path `/`; DPI / Content expects **64 KiB** by default.
-4. The inspection is queued in central SQLite. The agent **pulls** the one-time task through its regular `/api/sync` session and returns its structured results on a subsequent sync. The UI displays **Queued → Sent to agent → Completed**, or **Timed out** when the job expires. This may take several minutes depending on the agent sync interval (often 300 seconds); it is not an immediate inbound connection from central to an agent.
-5. When available, the result shows each check's status, duration, received/expected bytes, HTTP status, errors and probe metadata. The page also displays the **15 most recent inspection requests**.
+3. With the agent option **off**, Central immediately schedules all four connectivity probes: **TCP**, **TLS**, **HTTPS** and **DPI / Content**. They run in a bounded background worker, use the selected port and HTTPS path `/`, and report results as each check completes. Central probes allow only public destination IP addresses (no loopback, private or special-purpose ranges), use validated TLS certificates, do not follow redirects and limit DPI reads to **64 KiB**.
+4. Enable **Run probes from a selected agent instead of Central** to send a one-time task through the agent's normal sync channel. Choose the agent and one or more of the four checks; these agent probes may reach private networks according to that agent's routing.
+5. Results are persisted in SQLite and remain visible under **Recent inspections**. Central tasks show a running state while the worker executes the probes. Agent tasks show **Queued → Sent to agent → Completed**, or **Timed out** if the agent fails to return in time. Agents pull their tasks through `/api/sync`; Central never opens an inbound connection to them.
+6. Each result includes the check status, duration, bytes, HTTP status when applicable and errors. The page also displays the **15 most recent inspection requests**.
 
 Agent jobs expire after **30 minutes**. An agent can have at most **three** pending inspection requests, preventing the one-shot queue from growing without limit. A `BAN` match is a blocklist observation, not proof of censorship or a failed network connection. The selected remote probe checks actual connectivity from **that agent's location**, which can differ from central.
 
@@ -268,6 +270,8 @@ The control connection uses HTTPS with **TLS 1.3 only** (plain HTTP is accepted 
 Each agent has an immutable technical ID used for authentication, assignments and history. KVNRadar automatically derives a **two-character uppercase display label from the first two Latin letters** of the ID. For example, `hetzner` → `HE`, `edge-west` → `ED` and `node-1` → `NO`.
 
 Under **Agents → Short name**, enter a custom two-character label and click **Save**, or click **Auto** to restore the generated label. Manual duplicates are rejected; automatic duplicates may still occur and can be resolved by customizing one of them. The short label appears across the dashboard but does not change the agent ID or token.
+
+**Delete** removes the agent from the active registry and saves a persistent revocation in Central SQLite. The agent's future synchronization attempts are rejected even if its token remains in the read-only `config/agents.json`. Historical measurements and host definitions are preserved; pending Inspect tasks assigned to the agent expire. To decommission completely, also remove its token from the private `config/agents.json` and stop the agent service. Reusing a revoked ID requires an explicit database-level revocation reset; deleting and re-adding the token alone does not restore access.
 
 ## Languages and settings
 
@@ -355,7 +359,9 @@ sudo journalctl -u kvnradar-agent -n 100 --no-pager
 - **No agent measurements:** verify the exact agent ID and token in local config, the Central URL `https://YOUR_HOST:18080`, outbound firewall rules, TLS trust, `sync_seconds` and writable `state_dir`. Events produced after a sync are not transmitted until a later cycle.
 - **TLS handshake or verification errors:** verify the hostname, certificate chain and trusted issuer on the agent. Use `ca_file` for a private CA where appropriate; do not permanently disable TLS verification.
 - **Missing alerts:** first check whether a status transition is eligible; `SHORT_RESPONSE` is intentionally non-alerting and a disconnected agent does not generate a separate timed alert. Then check private `.env` channel configuration, the History failure panel and Central logs.
-- **Blocklist errors:** fetch URLs must be publicly reachable HTTPS endpoints on TCP 443. Private targets and redirects are rejected; failed downloads retain previous valid cached data.
+- **Blocklist errors:** fetch URLs must be publicly reachable HTTPS endpoints on TCP 443. Private targets and redirects are rejected; failed downloads retain previous valid cached data. **Check now** reruns host matching against cached lists; use **Update now** on a feed to download fresh entries first.
+- **Central Inspect cannot probe an address:** Central direct TCP/TLS/HTTPS/DPI checks refuse non-public IP destinations. Use an authorized agent in that network for private targets. Agent tasks may take several sync cycles.
+- **Removed agent still attempts sync:** the registry revocation is persistent; Central rejects the old token even if the agent binary and configuration remain on its host. Stop the agent service and remove the retired token from the local private credentials.
 - **Incomplete History:** a paused check, offline agent or stale sample is different from a 250-record UI history limit. The underlying measurements may still be in SQLite. **Clear History** permanently deletes the stored history categories described above.
 - **Large database / slow Settings:** VACUUM reclaims unused pages but does not prune active measurements. Inspect the maintenance statistics, allow free space for SQLite rebuilding, and back up before clearing history. The current maintenance status request counts rows in history tables, which can be expensive on large databases.
 - **VACUUM errors:** inspect **Settings → Database maintenance** and `docker compose logs --tail=100 central` for `SQLite VACUUM failed`. Check disk space and concurrent database activity.
@@ -380,16 +386,17 @@ Central implements `/health`, but the standard Nginx **agent-sync port** exposes
 | `BLOCKLIST_RESOLVE_DNS=0` | DNS resolving in the additional Blocklist Hits path; **does not** disable resolution by the main RIP/RDO scanner |
 | `SQLITE_VACUUM_INTERVAL_SECONDS=86400` | Seconds between scheduled SQLite VACUUM operations (24-hour default; `0` disables scheduling). Does not delete history |
 
-**Important:** `BLOCKLIST_RESOLVE_DNS` applies only to the auxiliary `blocklist_hits` matching path. The main RIP check has its own DNS-resolution behavior. Source URLs are edited in **Blocklists**, not through `.env`. In v0.6.9 the Blocklists **Host matches** table displays the central RIP/RDO results rather than the auxiliary hits.
+**Important:** `BLOCKLIST_RESOLVE_DNS` applies only to the auxiliary `blocklist_hits` matching path. The main RIP check has its own DNS-resolution behavior. Source URLs are edited in **Blocklists**, not through `.env`. The **Host matches** table displays central RIP/RDO results rather than auxiliary hits.
 
 ## Security
 
 - **Keep private:** `.env`, `auth/users`, `config/agents.json`, per-agent `agent.json`, `certs/privkey.pem`, SQLite databases, cached blocklists and backups.
-- Use a **different long random token for every agent**. A display short name never becomes an authentication identity.
+- Use a **different long random token for every agent**. A display short name never becomes an authentication identity. Removing an agent revokes the ID in Central's database but does not rewrite the read-only credentials file; decommission retired tokens separately.
 - Protect the admin service on TCP **9443** using HTTPS, Basic Auth and, preferably, firewall/IP restrictions. The dashboard has no MFA or separate user roles.
 - Use trusted TLS certificates for both browser and agent connections; do not disable peer verification in production.
 - Remember that optional notification integrations send incident fields to their configured destination.
 - The standard deployment does not publish a public status page; do not expose a separate unauthenticated deployment inadvertently.
+- Central's direct Inspect network probes connect only to public IP addresses and do not follow HTTP redirects. Restrict admin access because Inspect still initiates outbound connections.
 
 ## Building and testing
 

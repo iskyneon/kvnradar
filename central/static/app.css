@@ -198,3 +198,10 @@ a{text-decoration:none;color:inherit}
 .settings-maintenance .pill-btn.danger:hover{background:#971e23}
 .settings-maintenance .pill-btn.danger:disabled{opacity:.55;cursor:wait}
 #maintenance-message{min-height:1.4em;overflow-wrap:anywhere}
+
+/* Agent retirement and on-demand blocklist scanning */
+.agent-short-editor .agent-delete{margin-left:auto;background:#fff0ef;color:#b62929;border:1px solid #f2c6c2}
+.agent-short-editor .agent-delete:hover{background:#ffe3e0}
+.blocklist-check-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#blocklist-check-status{font-size:12px;color:#678273}
+#blocklist-check-now:disabled{opacity:.55;cursor:wait}
