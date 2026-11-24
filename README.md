@@ -418,22 +418,4 @@ kvnradar/
 - A fresh installation requires credentials, a valid HTTPS certificate and manual configuration of monitored hosts and agent IDs.
 
 
-## KVNRadar v0.6.9 — Database maintenance and Blocklists fixes
-
-This release is an overlay for the **current GitHub main branch**, rather than a production backup.
-
-## Changes
-- Blocklists Host matches reports current central RIP/RDO BANs only, without legacy RKN rows or duplicate counts. Display names come from the resource database.
-- Added an index for recent measurements to improve recent/history queries.
-- Scheduled SQLite `VACUUM`: `SQLITE_VACUUM_INTERVAL_SECONDS=86400` (default, 0 disables). This compacts deleted pages but does **not** delete current history.
-- Settings: live DB allocated/free space, history record count, last VACUUM, current schedule and running/error state.
-- Destructive Clear History with explicit confirmation; preserves hosts, feeds, current central checks and alert configuration.
-- Settings grid: language and maintenance on the left, runtime configuration on the right; responsive single column on narrow screens.
-- Version visible in the footer and settings API is `0.6.9`.
-
-## Apply to repository checkout
-
-Run `./apply-v0.6.9.sh /path/to/kvnradar` from the extracted overlay. It verifies that it is targeting a Git repository and copies the changed project files. Review `git diff` before committing.
-
-**Before deploying:** back up SQLite including WAL, stop writes for a consistent backup, and reserve enough free disk space for SQLite VACUUM. Database files, secrets, TLS keys, and live configuration are never supplied with this overlay.
 
