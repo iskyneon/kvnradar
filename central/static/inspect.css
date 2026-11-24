@@ -39,3 +39,5 @@
 .inspect-recent-row small{display:block;color:#86948b;margin-top:5px}
 .inspect-recent-row>span:last-child{display:flex;gap:6px}
 @media(max-width:700px){.inspect-inputs,.inspect-central-grid,.inspect-check-grid{grid-template-columns:1fr}.inspect-view-heading,.inspect-recent-row{align-items:flex-start}}
+
+#inspect-central-notice[hidden]{display:none!important}
