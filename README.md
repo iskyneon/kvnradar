@@ -68,7 +68,7 @@ flowchart LR
   N --> C[Python central API]
   C --> DB[(SQLite)]
   C --> BL[Locally cached RIP/RDO lists]
-  C -.->|Optional outbound alerts| TG[Telegram / Compass]
+  C -.->|Optional outbound alerts| [Telegram / Compass / Email]
 ```
 
 - Agents **pull** work and submit results; central does not initiate connections to agents.
