@@ -36,7 +36,7 @@
       <section id="page-overview" class="page active private-overview">
         <div class="private-overview-head">
           <h2>Services</h2>
-          <div class="legend" aria-label="Legend"><span><i class="legend-dot up"></i>Operational</span><span><i class="legend-dot degraded"></i>Degraded</span><span><i class="legend-dot down"></i>Outage</span><span><i class="legend-dot missing"></i>No data</span><span><i class="legend-dot excluded"></i>Excluded</span></div>
+          <div class="overview-controls"><label class="overview-search-label"><span id="overview-search-label">Search servers</span><input id="overview-search" type="search" placeholder="Server name" autocomplete="off"></label><div class="legend" role="group" aria-label="Filter services"><button type="button" data-overview-filter="healthy" aria-pressed="false"><i class="legend-dot up"></i><span data-filter-label="healthy">Operational</span></button><button type="button" data-overview-filter="degraded" aria-pressed="false"><i class="legend-dot degraded"></i><span data-filter-label="degraded">Degraded</span></button><button type="button" data-overview-filter="outage" aria-pressed="false"><i class="legend-dot down"></i><span data-filter-label="outage">Outage</span></button><button type="button" data-overview-filter="unknown" aria-pressed="false"><i class="legend-dot missing"></i><span data-filter-label="unknown">No data</span></button><button type="button" data-overview-filter="excluded" aria-pressed="false"><i class="legend-dot excluded"></i><span data-filter-label="excluded">Excluded</span></button></div></div>
           <div class="private-meta"><span id="live-dot" class="dot"></span><span id="updated-at">Updating status…</span></div>
         </div>
         <div id="services" class="services" aria-live="polite"><div class="empty">Loading…</div></div>
@@ -66,13 +66,13 @@
         <div class="metrics-row" id="feed-stats"></div>
         <div id="feed-sources" class="simple-grid"></div>
         <section class="soft-card">
-          <div class="section-top"><h2>Host matches</h2></div>
+          <div class="section-top"><h2>Host matches</h2><div class="blocklist-check-controls"><span id="blocklist-check-status" role="status" aria-live="polite"></span><button type="button" class="pill-btn light" id="blocklist-check-now">Check now</button></div></div>
           <div id="feed-hits"></div>
         </section>
       </section>
 
       <section id="page-inspect" class="page">
-        <div class="toolbar surface"><div><strong id="inspect-heading">Inspect</strong><div class="toolbar-meta" id="inspect-description">Check any host or IP against cached RIP/RDO blocklists and optionally request one-time probes from an agent.</div></div></div>
+        <div class="toolbar surface"><div><strong id="inspect-heading">Inspect</strong><div class="toolbar-meta" id="inspect-description">Check any host or IP against cached RIP/RDO blocklists and run connectivity probes from Central or a selected agent.</div></div></div>
         <section class="soft-card inspect-panel">
           <form id="inspect-form" autocomplete="off">
             <div class="inspect-inputs">
@@ -80,6 +80,7 @@
               <label><span id="inspect-port-label">Port</span><input id="inspect-port" type="number" min="1" max="65535" value="443" required></label>
             </div>
             <label class="switch-line inspect-option"><span id="inspect-agent-toggle-label">Run one-time probes from a selected agent</span><input id="inspect-use-agent" type="checkbox"></label>
+            <p id="inspect-central-notice" class="inspect-notice">Without an agent, Central runs TCP, TLS, HTTPS and DPI / Content probes immediately.</p>
             <div id="inspect-agent-options" class="inspect-agent-options" hidden>
               <label><span id="inspect-agent-label">Agent</span><select id="inspect-agent"><option value="">Select agent</option></select></label>
               <fieldset class="inspect-checks"><legend id="inspect-checks-label">One-time checks</legend>
@@ -139,7 +140,7 @@
         </div>
       </section>
     </main>
-    <footer class="app-footer" aria-label="KVNRadar version">KVNRadar <span>v0.6.9</span></footer>
+    <footer class="app-footer" aria-label="KVNRadar version">KVNRadar <span>v0.7.0</span></footer>
   </div>
 
   <dialog id="blocklist-dialog" class="modal">
