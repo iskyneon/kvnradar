@@ -1,4 +1,4 @@
-// KVNRadar v0.6.9 - read-only audit of failed notification delivery attempts.
+// KVNRadar v0.7.0 - read-only audit of failed notification delivery attempts.
 'use strict';
 (()=>{
  const root=document.getElementById('notification-failures');
