@@ -32,6 +32,11 @@ CENTRAL_SCAN_GUARD=threading.Lock()
 def now(): return datetime.now(timezone.utc).isoformat(timespec='seconds')
 def readjson(path):
     with open(path, encoding='utf-8') as f: return json.load(f)
+def active_agent_credentials():
+    configured=readjson(AGENTS)
+    with connect() as c:
+        revoked={row['agent'] for row in c.execute('SELECT agent FROM revoked_agents')}
+    return {name:token for name,token in configured.items() if name not in revoked}
 def connect():
     con = sqlite3.connect(DB, timeout=15)
     con.row_factory = sqlite3.Row
@@ -684,7 +689,7 @@ class Handler(BaseHTTPRequestHandler):
                 RIP_WAKE.set()
                 return self.reply(202,{'ok':True,'queued':True})
             if self.path == '/ui/api/inspect':
-                result=inspect_jobs.create(connect,obj,readjson(AGENTS))
+                result=inspect_jobs.create(connect,obj,active_agent_credentials())
                 return self.reply(200,{'job':result})
             if self.path.startswith('/ui/api/blocklists/source/'):
                 action=self.path.rsplit('/',1)[-1]
@@ -760,7 +765,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if self.path.startswith('/ui/api/inspect'):
             if self.path == '/ui/api/inspect':
-                return self.reply(200,{'jobs':inspect_jobs.recent_jobs(connect),'agents':sorted(readjson(AGENTS))})
+                return self.reply(200,{'jobs':inspect_jobs.recent_jobs(connect),'agents':sorted(active_agent_credentials())})
             q=parse_qs(urlparse(self.path).query)
             if urlparse(self.path).path != '/ui/api/inspect': return self.reply(404,{'error':'not found'})
             job=inspect_jobs.read_job(connect,q.get('id',[''])[0])
